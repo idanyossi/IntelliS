@@ -6,5 +6,5 @@ public interface Instruction {
     int execute(ExecutionManager em, int pc);
 
     //cost in cycles
-     int cycles();
+//     int cycles();
 }

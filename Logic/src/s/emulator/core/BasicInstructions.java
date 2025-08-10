@@ -19,7 +19,7 @@ public class BasicInstructions implements Instruction {
     public int execute(ExecutionManager ex,int pc){
       return switch (op){
           case INC -> {ex.increment(variable); yield pc + 1;}
-          case DEC -> {ex.decrement(variable); yield pc - 1;}
+          case DEC -> {ex.decrement(variable); yield pc + 1;}
           case NOOP -> pc + 1;
           case IF_NZ_GOTO -> {
               long val = ex.get(variable);
