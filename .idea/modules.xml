@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/IntelliS.iml" filepath="$PROJECT_DIR$/IntelliS.iml" />
+      <module fileurl="file://$PROJECT_DIR$/console/console.iml" filepath="$PROJECT_DIR$/console/console.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Logic/logic.iml" filepath="$PROJECT_DIR$/Logic/logic.iml" />
+    </modules>
+  </component>
+</project>
