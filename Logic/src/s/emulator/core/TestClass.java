@@ -1,37 +1,58 @@
 package s.emulator.core;
+import java.io.File;
 import java.util.*;
 
 import static s.emulator.core.BasicInstructions.BasicOp.*;
 
 public class TestClass {
 
-    public static void main(String[] args) {
-        // 1) Labels: name -> instruction index
-        Map<String,Integer> labels = new HashMap<>();
-        labels.put("Lloop", 1);
-        labels.put("Lbody", 3);
+    public static void main(String[] args) throws Exception {
+        if (args.length == 0) {
+            System.err.println("Usage: java s.emulator.core.TestClass <program.xml> [var=value ...]");
+            System.err.println("Example: java s.emulator.core.TestClass program.xml x1=4");
+            System.exit(1);
+        }
 
-        // 2) Program: copy x1 into y via a loop
-        List<Instruction> prog = new ArrayList<>();
-        prog.add(new BasicInstructions(INC,       "z1", null));         // 0: z1 = 1 (constant 1)
-        prog.add(new BasicInstructions(IF_NZ_GOTO,"x1", "Lbody"));      // 1: if x1!=0 -> body
-        prog.add(new BasicInstructions(IF_NZ_GOTO,"z1", "EXIT"));       // 2: else -> EXIT (unconditional via z1==1)
-        prog.add(new BasicInstructions(DEC,       "x1", null));         // 3: x1--
-        prog.add(new BasicInstructions(INC,       "y",  null));         // 4: y++
-        prog.add(new BasicInstructions(IF_NZ_GOTO,"z1", "Lloop"));      // 5: back to loop
+        // 1) XML file
+        File xmlFile = new File(args[0]);
+        if (!xmlFile.isFile()) {
+            System.err.println("Program XML not found: " + xmlFile.getAbsolutePath());
+            System.exit(2);
+        }
 
-        // 3) State + input
-        ExecutionManager ex = new ExecutionManager(labels);
-        ex.set("x1", 4);                                               // hardcoded input
+        // 2) Program + labels (these are the SAME references passed to the loader)
+        List<Instruction> program = new ArrayList<>();
+        Map<String, Integer> labels = new HashMap<>();
 
-        // 4) Run
-        new Interpreter().run(prog, ex);
+        // 3) Load from XML -> fills program + labels
+        XmlProgramLoader loader = new XmlProgramLoader(program, labels);
+        loader.load(xmlFile);
 
-        // 5) Check
-        System.out.println("y  = " + ex.get("y"));                     // expect 4
-        System.out.println("x1 = " + ex.get("x1"));                    // expect 0
-        System.out.println("z1 = " + ex.get("z1"));                    // expect 1
+        // 4) Create execution manager and set optional initial variables: var=value
+        ExecutionManager em = new ExecutionManager(labels);
+        for (int i = 1; i < args.length; i++) {
+            String[] kv = args[i].split("=", 2);
+            if (kv.length == 2) {
+                String var = kv[0].trim();
+                try {
+                    int val = Integer.parseInt(kv[1].trim());
+                    em.set(var, val);
+                } catch (NumberFormatException ignored) {
+                    System.err.println("Ignoring invalid value for " + var + ": " + kv[1]);
+                }
+            }
+        }
 
+        // 5) Run
+        new Interpreter().run(program, em);
+
+        // 6) Output summary
+        System.out.println("== Run complete ==");
+        System.out.println("Program length: " + program.size());
+        System.out.println("Labels: " + labels);
+        // Print all variables that were touched (if ExecutionManager exposes them you can iterate; otherwise print common ones)
+        for (String v : List.of("x1", "y", "z1")) {
+            System.out.println(v + " = " + em.get(v));
+        }
     }
-
 }
