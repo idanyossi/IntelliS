@@ -32,6 +32,10 @@ public class BasicInstructions implements Instruction {
         return op;
     }
 
+    public String getVariable() {
+        return variable;
+    }
+
     public String getLabel() {
         return label;
     }
