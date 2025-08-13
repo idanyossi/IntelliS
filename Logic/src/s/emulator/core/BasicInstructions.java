@@ -27,4 +27,12 @@ public class BasicInstructions implements Instruction {
           }
       };
     }
+
+    public BasicOp getOp() {
+        return op;
+    }
+
+    public String getLabel() {
+        return label;
+    }
 }
