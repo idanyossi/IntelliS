@@ -1,10 +1,8 @@
 package s.emulator.core;
 
-import jakarta.xml.bind.Element;
+
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.Unmarshaller;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 import s.emulator.core.instructions.Decrease;
 import s.emulator.core.instructions.Increase;
 import s.emulator.core.instructions.JumpNotZero;

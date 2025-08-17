@@ -10,6 +10,7 @@ public final class Program {
     private final List<Instruction> instructions;      // immutable order
     private final Map<String, Integer> firstLabelIndex; // label -> FIRST occurrence index
 
+
     public Program(String name, List<Instruction> instructions) {
         this.name = name;
         this.instructions = List.copyOf(instructions);

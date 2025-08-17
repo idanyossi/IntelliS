@@ -1,9 +1,7 @@
 package s.emulator.core;
 
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.function.Function;
 
 public class ExecutionManager {
 
@@ -80,11 +78,54 @@ public class ExecutionManager {
         return out;
     }
 
+    public void jumpToLabel(String label) {
+        if (label == null || label.isBlank()) throw new IllegalArgumentException("jumpToLabel: label is empty");
+        if ("EXIT".equalsIgnoreCase(label)) { stop(); return; }
+        var idx = program.lookupLabel(label);
+        if (idx.isEmpty()) throw new IllegalStateException("Unknown label: " + label);
+        setPC(idx.getAsInt());
+    }
+
     private static int suffixInt(String s) {
         try {
             return Integer.parseInt(s.substring(1));
         } catch (Exception e) {
             return Integer.MAX_VALUE;
         }
+    }
+    public void addCycles(long c) {
+        if (c > 0) totalCycles += c;
+    }
+
+    private Function<String, Program> functionResolver;
+
+    public void setFunctionResolver(Function<String, Program> resolver) {
+        this.functionResolver = resolver;
+    }
+
+    public Program resolveFunction(String name) {
+        if (functionResolver == null) {
+            throw new IllegalStateException("No function resolver set (needed for QUOTE/JUMP_EQUAL_FUNCTION).");
+        }
+        Program p = functionResolver.apply(name);
+        if (p == null) throw new IllegalArgumentException("Function not found: " + name);
+        return p;
+    }
+
+    public static class RunOutcome {
+        private final int y;
+        private final long cycles;
+        public RunOutcome(int y, long cycles) { this.y = y; this.cycles = cycles; }
+        public int getY() { return y; }
+        public long getCycles() { return cycles; }
+    }
+
+    public RunOutcome runSubprogram(Program sub, List<Integer> args) {
+        ExecutionManager child = new ExecutionManager(sub);
+        for (int i = 0; i < args.size(); i++) {
+            child.setVar("x" + (i + 1), args.get(i));
+        }
+        long childCycles = Interpreter.run(child);
+        return new RunOutcome(child.getVar("y"), childCycles);
     }
 }
