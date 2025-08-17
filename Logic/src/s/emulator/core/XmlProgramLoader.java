@@ -1,196 +1,156 @@
 package s.emulator.core;
 
+import jakarta.xml.bind.Element;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.Unmarshaller;
-import s.emulator.jaxb.SInstruction;
-import s.emulator.jaxb.SInstructionArgument;
-import s.emulator.jaxb.SInstructions;
-import s.emulator.jaxb.SProgram;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import s.emulator.core.instructions.Decrease;
+import s.emulator.core.instructions.Increase;
+import s.emulator.core.instructions.JumpNotZero;
+import s.emulator.core.instructions.NoOp;
+import s.emulator.jaxb.*;
 
 import java.io.File;
 import java.util.*;
 
-import static s.emulator.core.BasicInstructions.BasicOp.*;
-
 public class XmlProgramLoader {
-    public final List<Instruction> program;
-    public final Map<String,Integer> labels;
-    public List<String> errors = new ArrayList<>();
+    public Program load(File xmlFile) throws Exception {
+        requireXml(xmlFile);
 
-    private String programName;
-
-    public XmlProgramLoader(List<Instruction> program, Map<String,Integer> labels) {
-        this.program = program;
-        this.labels = labels;
-    }
-
-    public void load(File xmlFile) throws Exception{
-
-        errors.clear();
-
-        if (!basicFileChecks(xmlFile)) return;
-
-        SProgram sProgram = parse(xmlFile);
-        if (sProgram == null) return;
-
-        List<SInstruction> sList = getSInstructionList(sProgram);
-        if (sList == null) return;
-
-        List<Instruction> tmpProgram = new ArrayList<>(sList.size());
-        Map<String,Integer> tmpLabels = new LinkedHashMap<>();
-        Map<String,Integer> firstDef  = new HashMap<>();
-
-        buildTemp(sList, tmpProgram, tmpLabels, firstDef);
-
-
-        validateCommands(tmpProgram);
-        validateLabels(tmpProgram, tmpLabels, firstDef);
-
-        if (!errors.isEmpty()) return;
-
-        // Commit
-        program.clear(); program.addAll(tmpProgram);
-        labels.clear();  labels.putAll(tmpLabels);
-        programName = sProgram.getName();
-    }
-
-    public boolean hasErrors() { return !errors.isEmpty(); }
-    public List<String> getErrors() { return Collections.unmodifiableList(errors); }
-    public String getProgramName() { return programName; }
-
-    private boolean basicFileChecks(File xmlFile) {
-        if (xmlFile == null) { errors.add("file not supplied "); return false; }
-        if (!xmlFile.isFile()) { errors.add("file not found " + xmlFile.getAbsolutePath()); return false; }
-        if (!xmlFile.getName().toLowerCase(Locale.ROOT).endsWith(".xml")) {
-            errors.add("must provide a file with .xml"); return false;
+        JAXBContext ctx = JAXBContext.newInstance(SProgram.class.getPackageName());
+        Unmarshaller um = ctx.createUnmarshaller();
+        Object root = um.unmarshal(xmlFile);
+        if (!(root instanceof SProgram sprog)) {
+            throw new IllegalArgumentException("Root element is not <S-Program>.");
         }
-        return true;
+
+        final String programName = safeTrim(sprog.getName(), "Unnamed");
+
+        SInstructions sIns = sprog.getSInstructions();
+        if (sIns == null || sIns.getSInstruction() == null) {
+            throw new IllegalArgumentException("Missing <S-Instructions> or it is empty.");
+        }
+
+        List<SInstruction> raw = sIns.getSInstruction();
+        List<Instruction> code = new ArrayList<>(raw.size());
+
+        for (SInstruction si : raw) {
+            final String type = upper(safeTrim(si.getType(), "basic"));
+            final String name = upper(reqAttr(si.getName(), "S-Instruction/@name"));
+            final String var  = safeTrim(si.getSVariable(), null);
+            final String lbl  = safeTrim(si.getSLabel(), null);
+
+            // Only "basic" for this milestone; ignore/validate otherwise if you want.
+            if (!"BASIC".equals(type)) {
+                throw new IllegalArgumentException("Only basic instructions are supported at this stage. Found type=" + type);
+            }
+
+            Instruction insn = switch (name) {
+                case "INCREASE" -> {
+                    ensureVar("INCREASE", var);
+                    yield new Increase(lbl, var);
+                }
+                case "DECREASE" -> {
+                    ensureVar("DECREASE", var);
+                    yield new Decrease(lbl, var);
+                }
+                case "NEUTRAL" -> {
+                    // Spec says NO-OP is V <- V, so we still expect a variable token.
+                    ensureVar("NEUTRAL", var);
+                    yield new NoOp(lbl, var);
+                }
+                case "JUMP_NOT_ZERO" -> {
+                    ensureVar("JUMP_NOT_ZERO", var);
+                    String target = findArg(si.getSInstructionArguments(), "JNZLabel");
+                    if (target == null || target.isBlank()) {
+                        throw new IllegalArgumentException("JUMP_NOT_ZERO requires <S-Instruction-Argument name=\"JNZLabel\" value=\"...\"/>.");
+                    }
+                    yield new JumpNotZero(lbl, var, target.trim());
+                }
+                default -> throw new IllegalArgumentException("Unknown basic instruction name: " + name);
+            };
+
+            code.add(insn);
+        }
+
+        // Eager validation (friendly error if jump references missing label)
+        validateJnzTargets(code);
+
+        return new Program(programName, code);
     }
 
-    private SProgram parse(File xmlFile) {
+    // ---------- helpers ----------
+
+    private static void requireXml(File f) {
+        if (f == null) throw new IllegalArgumentException("File is null.");
+        if (!f.exists()) throw new IllegalArgumentException("File not found: " + f.getAbsolutePath());
+        String n = f.getName().toLowerCase(Locale.ROOT);
+        if (!n.endsWith(".xml")) throw new IllegalArgumentException("Expected a .xml file, got: " + f.getName());
+    }
+
+    private static String safeTrim(String s, String fallback) {
+        if (s == null) return fallback;
+        String t = s.trim();
+        return t.isEmpty() ? fallback : t;
+    }
+
+    private static String upper(String s) {
+        return s == null ? null : s.toUpperCase(Locale.ROOT);
+    }
+
+    private static String reqAttr(String s, String where) {
+        if (s == null || s.trim().isEmpty()) {
+            throw new IllegalArgumentException("Missing required attribute/text at " + where);
+        }
+        return s.trim();
+    }
+
+    private static void ensureVar(String op, String var) {
+        if (var == null || var.isBlank()) {
+            throw new IllegalArgumentException(op + " requires <S-Variable>.");
+        }
+    }
+
+    /** Extract specific argument (by @name) from <S-Instruction-Arguments>. */
+    private static String findArg(SInstructionArguments args, String wantedName) {
+        if (args == null || args.getSInstructionArgument() == null) return null;
+        for (SInstructionArgument a : args.getSInstructionArgument()) {
+            if (wantedName.equals(a.getName())) {
+                String val = a.getValue();
+                return val == null ? null : val.trim();
+            }
+        }
+        return null;
+    }
+
+    /** Fail-fast if any JNZ (non-EXIT) points to a label that does not exist. */
+    private static void validateJnzTargets(List<Instruction> code) {
+        Set<String> labels = new HashSet<>();
+        for (Instruction ins : code) {
+            String lbl = ins.getLabel();
+            if (lbl != null && !lbl.isBlank()) labels.add(lbl.trim());
+        }
+        for (Instruction ins : code) {
+            if (ins instanceof JumpNotZero jnz) {
+                String tgt = getTargetLabel(jnz);
+                if (tgt != null && !"EXIT".equalsIgnoreCase(tgt) && !labels.contains(tgt)) {
+                    throw new IllegalArgumentException("Unknown label referenced by JUMP_NOT_ZERO: " + tgt);
+                }
+            }
+        }
+    }
+
+    // Prefer: add a real getter in JumpNotZero, e.g., public String getTargetLabel().
+    private static String getTargetLabel(JumpNotZero jnz) {
         try {
-            JAXBContext ctx = JAXBContext.newInstance(SProgram.class);
-            Unmarshaller um = ctx.createUnmarshaller();
-            return (SProgram) um.unmarshal(xmlFile);
-        } catch (Exception e) {
-            String msg = (e.getCause() != null && e.getCause().getMessage() != null)
-                    ? e.getCause().getMessage() : String.valueOf(e.getMessage());
-            errors.add("xml parsing error " + msg);
-            return null;
+            var f = JumpNotZero.class.getDeclaredField("target");
+            f.setAccessible(true);
+            Object v = f.get(jnz);
+            return v == null ? null : v.toString();
+        } catch (Exception ignore) {
+            return null; // skip if not accessible
         }
     }
-
-    private List<SInstruction> getSInstructionList(SProgram sProgram) {
-        if (sProgram == null || sProgram.getSInstructions() == null) {
-            errors.add("no instructions block");
-            return null;
-        }
-        List<SInstruction> list = sProgram.getSInstructions().getSInstruction();
-        if (list == null || list.isEmpty()) {
-            errors.add("no commands in the file");
-            return null;
-        }
-        return list;
-    }
-
-    private void buildTemp(List<SInstruction> sList, List<Instruction> tmpProgram, Map<String,Integer> tmpLabels, Map<String,Integer> firstDef) {
-        int pc = 0;
-        for (SInstruction si : sList) {
-            BasicInstructions.BasicOp op;
-            try {
-                op = mapOp(si.getName());
-            } catch (IllegalArgumentException iae) {
-                errors.add("unsupported command in line: #" + (pc + 1) + ": " + si.getName());
-                op = NOOP;
-            }
-
-            String var = si.getSVariable();
-
-            // Label definition
-            String labelDef = si.getSLabel();
-            if (labelDef != null && !labelDef.isEmpty()) {
-                Integer prev = firstDef.putIfAbsent(labelDef, pc);
-                if (prev == null) {
-                    tmpLabels.put(labelDef, pc);
-                } else if (!Objects.equals(prev, pc)) {
-                    tmpLabels.put(labelDef, pc);
-                }
-            }
-
-            String jumpTarget = (op == IF_NZ_GOTO) ? extractJumpTarget(si) : null;
-
-            tmpProgram.add(new BasicInstructions(op, var, jumpTarget));
-            pc++;
-        }
-    }
-    private void validateCommands(List<Instruction> tmpProgram) {
-        for (int i = 0; i < tmpProgram.size(); i++) {
-            Instruction ins = tmpProgram.get(i);
-            if (ins instanceof BasicInstructions bi) {
-                if (bi.getOp() == IF_NZ_GOTO) {
-                    String target = bi.getLabel();
-                    if (target == null || target.isEmpty()) {
-                        errors.add("jump with no destination label #" + (i + 1));
-                    }
-                }
-            }
-        }
-    }
-
-    private void validateLabels(List<Instruction> tmpProgram, Map<String,Integer> tmpLabels, Map<String,Integer> firstDef) {
-        for (Map.Entry<String,Integer> e : tmpLabels.entrySet()) {
-            String name = e.getKey();
-            Integer pc = e.getValue();
-            Integer first = firstDef.get(name);
-            if (first != null && !Objects.equals(first, pc)) {
-                errors.add("Duplicate label '" + name + "' (lines #" + (first + 1) + " and #" + (pc + 1) + ")");
-            }
-        }
-
-        for (int i = 0; i < tmpProgram.size(); i++) {
-            Instruction ins = tmpProgram.get(i);
-            if (ins instanceof BasicInstructions bi) {
-                if (bi.getOp() == IF_NZ_GOTO) {
-                    String t = bi.getLabel();
-                    if (t != null && !t.isEmpty() && !"EXIT".equals(t) && !tmpLabels.containsKey(t)) {
-                        errors.add("jump to label that doesnt exist" + t + "'# line: " + (i + 1));
-                    }
-                }
-            }
-        }
-
-        for (Map.Entry<String,Integer> e : tmpLabels.entrySet()) {
-            Integer p = e.getValue();
-            if (p == null || p < 0 || p >= tmpProgram.size()) {
-                errors.add("label'" + e.getKey() + "' points to an illegal line:  " + p);
-            }
-        }
-    }
-
-    private static String extractJumpTarget(SInstruction si) {
-        if (si.getSInstructionArguments() == null
-                || si.getSInstructionArguments().getSInstructionArgument() == null
-                || si.getSInstructionArguments().getSInstructionArgument().isEmpty()) {
-            return null;
-        }
-        Object first = si.getSInstructionArguments().getSInstructionArgument().getFirst();
-        if (first instanceof String) return (String) first;
-        if (first != null) return ((SInstructionArgument) first).getValue();
-        return (first != null) ? String.valueOf(first) : null;
-    }
-
-    private static BasicInstructions.BasicOp mapOp(String xmlName) {
-        if (xmlName == null) throw new IllegalArgumentException("no name for the file.");
-        switch (xmlName) {
-            case "INCREASE":      return INC;
-            case "DECREASE":      return DEC;
-            case "NEUTRAL":       return NOOP;
-            case "JUMP_NOT_ZERO": return IF_NZ_GOTO;
-            default: throw new IllegalArgumentException("unsupported command " + xmlName);
-        }
-    }
-
-
-
 
 }

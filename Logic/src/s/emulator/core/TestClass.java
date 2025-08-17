@@ -2,57 +2,40 @@ package s.emulator.core;
 import java.io.File;
 import java.util.*;
 
-import static s.emulator.core.BasicInstructions.BasicOp.*;
-
 public class TestClass {
 
     public static void main(String[] args) throws Exception {
-        if (args.length == 0) {
-            System.err.println("Usage: java s.emulator.core.TestClass <program.xml> [var=value ...]");
-            System.err.println("Example: java s.emulator.core.TestClass program.xml x1=4");
+        if (args.length < 1) {
+            System.err.println("Usage: java ... TestClass <xmlPath> [x1=4,x2=7,...]");
             System.exit(1);
         }
+        File xml = new File(args[0]);
 
-        // 1) XML file
-        File xmlFile = new File(args[0]);
-        if (!xmlFile.isFile()) {
-            System.err.println("Program XML not found: " + xmlFile.getAbsolutePath());
-            System.exit(2);
-        }
+        XmlProgramLoader loader = new XmlProgramLoader();
+        Program program = loader.load(xml);
 
-        // 2) Program + labels (these are the SAME references passed to the loader)
-        List<Instruction> program = new ArrayList<>();
-        Map<String, Integer> labels = new HashMap<>();
+        ExecutionManager em = new ExecutionManager(program);
 
-        // 3) Load from XML -> fills program + labels
-        XmlProgramLoader loader = new XmlProgramLoader(program, labels);
-        loader.load(xmlFile);
-
-        // 4) Create execution manager and set optional initial variables: var=value
-        ExecutionManager em = new ExecutionManager(labels);
-        for (int i = 1; i < args.length; i++) {
-            String[] kv = args[i].split("=", 2);
-            if (kv.length == 2) {
-                String var = kv[0].trim();
-                try {
-                    int val = Integer.parseInt(kv[1].trim());
-                    em.set(var, val);
-                } catch (NumberFormatException ignored) {
-                    System.err.println("Ignoring invalid value for " + var + ": " + kv[1]);
+        // Optional: parse k=v inputs after path (x*, z*, y allowed; absent => 0)
+        if (args.length >= 2) {
+            for (int i = 1; i < args.length; i++) {
+                String[] kv = args[i].split("=", 2);
+                if (kv.length == 2) {
+                    String k = kv[0].trim();
+                    int v = Integer.parseInt(kv[1].trim());
+                    em.setVar(k, v);
                 }
             }
         }
 
-        // 5) Run
-        new Interpreter().run(program, em);
+        long cycles = Interpreter.run(em);
 
-        // 6) Output summary
-        System.out.println("== Run complete ==");
-        System.out.println("Program length: " + program.size());
-        System.out.println("Labels: " + labels);
-        // Print all variables that were touched (if ExecutionManager exposes them you can iterate; otherwise print common ones)
-        for (String v : List.of("x1", "y", "z1")) {
-            System.out.println(v + " = " + em.get(v));
+        System.out.println("Program: " + program.getName());
+        System.out.println("Cycles: " + cycles);
+
+        // Print variables: y, xs asc, zs asc (already ordered by snapshotVars)
+        for (Map.Entry<String,Integer> e : em.snapshotVars().entrySet()) {
+            System.out.println(e.getKey() + " = " + e.getValue());
         }
     }
 }
