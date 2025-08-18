@@ -3,6 +3,7 @@ package s.emulator.core.instructions;
 import s.emulator.core.ExecutionManager;
 import s.emulator.core.Instruction;
 
+import java.util.Map;
 import java.util.OptionalInt;
 
 public final class JumpNotZero implements Instruction {
@@ -15,6 +16,7 @@ public final class JumpNotZero implements Instruction {
         this.var = var;
         this.target = targetLabel;
     }
+    private JumpNotZero() { this.label=null; this.var=null; this.target=null; }
 
     @Override public String getLabel() { return label; }
     @Override public int getCycles() { return 2; }  // as in your example
@@ -38,5 +40,14 @@ public final class JumpNotZero implements Instruction {
         } else {
             em.incPC();
         }
+    }
+    @Override
+    public Instruction buildFromXml(String label, String variable, Map<String,String> args) {
+        if (variable == null || variable.isBlank())
+            throw new IllegalArgumentException("JUMP_NOT_ZERO requires <S-Variable>.");
+        String tgt = args.get("JNZLabel");
+        if (tgt == null || tgt.isBlank())
+            throw new IllegalArgumentException("JUMP_NOT_ZERO requires arg JNZLabel.");
+        return new JumpNotZero(label, variable, tgt.trim());
     }
 }

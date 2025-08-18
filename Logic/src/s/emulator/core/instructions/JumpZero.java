@@ -3,6 +3,8 @@ package s.emulator.core.instructions;
 import s.emulator.core.ExecutionManager;
 import s.emulator.core.Instruction;
 
+import java.util.Map;
+
 public final class JumpZero implements Instruction {
     private final String label;
     private final String var;
@@ -13,6 +15,7 @@ public final class JumpZero implements Instruction {
         this.var = var;
         this.targetLabel = targetLabel;
     }
+    private JumpZero() { this.label=null; this.var=null; this.targetLabel=null; }
 
     @Override public String getLabel() {return label;}
     @Override public int getCycles() {return 2;}
@@ -25,5 +28,14 @@ public final class JumpZero implements Instruction {
         } else {
             executionManager.incPC();
         }
+    }
+    @Override
+    public Instruction buildFromXml(String label, String variable, Map<String,String> args) {
+        if (variable == null || variable.isBlank())
+            throw new IllegalArgumentException("JUMP_ZERO requires <S-Variable>.");
+        String tgt = args.get("JZLabel");
+        if (tgt == null || tgt.isBlank())
+            throw new IllegalArgumentException("JUMP_ZERO requires arg JZLabel.");
+        return new JumpZero(label, variable, tgt.trim());
     }
 }

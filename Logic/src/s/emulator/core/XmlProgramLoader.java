@@ -34,51 +34,28 @@ public class XmlProgramLoader {
         List<Instruction> code = new ArrayList<>(raw.size());
 
         for (SInstruction si : raw) {
-            final String type = upper(safeTrim(si.getType(), "basic"));
-            final String name = upper(reqAttr(si.getName(), "S-Instruction/@name"));
-            final String var  = safeTrim(si.getSVariable(), null);
-            final String lbl  = safeTrim(si.getSLabel(), null);
+            final String opcode   = upper(reqAttr(si.getName(), "S-Instruction/@name")); // e.g., INCREASE, ZERO_VARIABLE
+            final String typeHint = safeTrim(si.getType(), null);                         // "basic"/"synthetic" or null
+            final String variable = safeTrim(si.getSVariable(), null);
+            final String label    = safeTrim(si.getSLabel(), null);
+            final Map<String,String> args = toArgMap(si.getSInstructionArguments());
 
-            // Only "basic" for this milestone; ignore/validate otherwise if you want.
-            if (!"BASIC".equals(type)) {
-                throw new IllegalArgumentException("Only basic instructions are supported at this stage. Found type=" + type);
-            }
+            // 1) find the class by naming convention
+            Class<?> cls = resolveInstructionClass(opcode, typeHint);
 
-            Instruction insn = switch (name) {
-                case "INCREASE" -> {
-                    ensureVar("INCREASE", var);
-                    yield new Increase(lbl, var);
-                }
-                case "DECREASE" -> {
-                    ensureVar("DECREASE", var);
-                    yield new Decrease(lbl, var);
-                }
-                case "NEUTRAL" -> {
-                    // Spec says NO-OP is V <- V, so we still expect a variable token.
-                    ensureVar("NEUTRAL", var);
-                    yield new NoOp(lbl, var);
-                }
-                case "JUMP_NOT_ZERO" -> {
-                    ensureVar("JUMP_NOT_ZERO", var);
-                    String target = findArg(si.getSInstructionArguments(), "JNZLabel");
-                    if (target == null || target.isBlank()) {
-                        throw new IllegalArgumentException("JUMP_NOT_ZERO requires <S-Instruction-Argument name=\"JNZLabel\" value=\"...\"/>.");
-                    }
-                    yield new JumpNotZero(lbl, var, target.trim());
-                }
-                default -> throw new IllegalArgumentException("Unknown basic instruction name: " + name);
-            };
+            // 2) create a prototype via its PRIVATE no-arg ctor
+            var ctor = cls.getDeclaredConstructor();
+            ctor.setAccessible(true);
+            Instruction proto = (Instruction) ctor.newInstance();
+
+            // 3) ask it to build a configured instance from XML
+            Instruction insn = proto.buildFromXml(label, variable, args);
 
             code.add(insn);
         }
 
-        // Eager validation (friendly error if jump references missing label)
-        validateJnzTargets(code);
-
         return new Program(programName, code);
     }
-
-    // ---------- helpers ----------
 
     private static void requireXml(File f) {
         if (f == null) throw new IllegalArgumentException("File is null.");
@@ -149,6 +126,49 @@ public class XmlProgramLoader {
         } catch (Exception ignore) {
             return null; // skip if not accessible
         }
+    }
+
+    private static Map<String,String> toArgMap(SInstructionArguments args) {
+        Map<String,String> map = new HashMap<>();
+        if (args != null && args.getSInstructionArgument() != null) {
+            for (SInstructionArgument a : args.getSInstructionArgument()) {
+                if (a.getName() != null) {
+                    map.put(a.getName(), a.getValue() == null ? "" : a.getValue().trim());
+                }
+            }
+        }
+        return map;
+    }
+
+    /** Resolve instruction class by XML name; prefer package by type hint. */
+    private static Class<?> resolveInstructionClass(String opcode, String typeHint) {
+        String simple = toClassSimpleName(opcode); // e.g., JUMP_EQUAL_CONSTANT -> JumpEqualConstant
+        List<String> pkgs = new ArrayList<>();
+        if ("basic".equalsIgnoreCase(typeHint)) {
+            pkgs.add("s.emulator.core.instructions");
+            pkgs.add("s.emulator.synth");
+        } else if ("synthetic".equalsIgnoreCase(typeHint)) {
+            pkgs.add("s.emulator.synth");
+            pkgs.add("s.emulator.core.instructions");
+        } else {
+            pkgs.add("s.emulator.synth");
+            pkgs.add("s.emulator.core.instructions");
+        }
+        for (String pkg : pkgs) {
+            try { return Class.forName(pkg + "." + simple); }
+            catch (ClassNotFoundException ignore) {}
+        }
+        throw new IllegalArgumentException("No instruction class for opcode " + opcode +
+                " (expected " + simple + " under " + pkgs + ")");
+    }
+
+    private static String toClassSimpleName(String opcode) {
+        String[] parts = opcode.toLowerCase(Locale.ROOT).split("_");
+        StringBuilder sb = new StringBuilder();
+        for (String p : parts) if (!p.isEmpty()) {
+            sb.append(Character.toUpperCase(p.charAt(0))).append(p.substring(1));
+        }
+        return sb.toString();
     }
 
 }

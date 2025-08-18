@@ -3,6 +3,8 @@ package s.emulator.core.instructions;
 import s.emulator.core.ExecutionManager;
 import s.emulator.core.Instruction;
 
+import java.util.Map;
+
 public final class Decrease implements Instruction {
     private final String label;
     private final String var;
@@ -11,6 +13,7 @@ public final class Decrease implements Instruction {
         this.label = label;
         this.var = var;
     }
+    private Decrease() { this.label = null; this.var = null; }
 
     @Override public String getLabel() { return label; }
     @Override public int getCycles() { return 1; }
@@ -21,5 +24,11 @@ public final class Decrease implements Instruction {
         em.setVar(var, Math.max(0, v - 1));
         em.addCycles(getCycles());
         em.incPC();
+    }
+
+    public Instruction buildFromXml(String label, String variable, Map<String,String> args) {
+        if (variable == null || variable.isBlank())
+            throw new IllegalArgumentException("DECREASE requires <S-Variable>.");
+        return new Decrease(label, variable);
     }
 }

@@ -3,6 +3,8 @@ package s.emulator.core.instructions;
 import s.emulator.core.ExecutionManager;
 import s.emulator.core.Instruction;
 
+import java.util.Map;
+
 public final class JumpEqualConstant implements Instruction {
     private final String label;
     private final String var;
@@ -15,6 +17,7 @@ public final class JumpEqualConstant implements Instruction {
         this.k = k;
         this.targetLabel = targetLabel;
     }
+    private JumpEqualConstant() { this.label=null; this.var=null; this.k=0; this.targetLabel=null; }
 
     @Override public String getLabel() {return label;}
     @Override public int getCycles() {return 2;}
@@ -38,5 +41,20 @@ public final class JumpEqualConstant implements Instruction {
         } else {
             executionManager.incPC();
         }
+    }
+    @Override
+    public Instruction buildFromXml(String label, String variable, Map<String,String> args) {
+        if (variable == null || variable.isBlank())
+            throw new IllegalArgumentException("JUMP_EQUAL_CONSTANT requires <S-Variable>.");
+        String tgt = args.get("JEConstantLabel");
+        String val = args.get("constantValue");
+        if (tgt == null || tgt.isBlank())
+            throw new IllegalArgumentException("JUMP_EQUAL_CONSTANT requires arg JEConstantLabel.");
+        if (val == null || val.isBlank())
+            throw new IllegalArgumentException("JUMP_EQUAL_CONSTANT requires arg constantValue.");
+        int k;
+        try { k = Integer.parseInt(val.trim()); if (k < 0) throw new NumberFormatException(); }
+        catch (NumberFormatException e) { throw new IllegalArgumentException("constantValue must be a natural number (>=0)."); }
+        return new JumpEqualConstant(label, variable, k, tgt.trim());
     }
 }

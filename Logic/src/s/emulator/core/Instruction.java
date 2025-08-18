@@ -1,6 +1,7 @@
 package s.emulator.core;
 
 import java.util.List;
+import java.util.Map;
 
 public interface Instruction {
 
@@ -9,6 +10,8 @@ public interface Instruction {
     int getCycles();
 
     void execute(ExecutionManager em);
+
+    Instruction buildFromXml(String label, String variable, Map<String,String> args);
 
     default boolean isBasic() { return true; }
 

@@ -3,6 +3,8 @@ package s.emulator.core.instructions;
 import s.emulator.core.ExecutionManager;
 import s.emulator.core.Instruction;
 
+import java.util.Map;
+
 public final class GotoLabel implements Instruction {
     private final String label;
     private final String targetLabel;
@@ -11,6 +13,7 @@ public final class GotoLabel implements Instruction {
         this.label = label;
         this.targetLabel = targetLabel;
     }
+    private GotoLabel() { this.label=null; this.targetLabel=null; }
 
     @Override public String getLabel() {return label;}
     @Override public int getCycles() {return 1;}
@@ -19,5 +22,13 @@ public final class GotoLabel implements Instruction {
     public void execute(ExecutionManager executionManager) {
         executionManager.addCycles(getCycles());
         executionManager.jumpToLabel(targetLabel);
+    }
+
+    @Override
+    public Instruction buildFromXml(String label, String variable, Map<String,String> args) {
+        String tgt = args.get("gotoLabel");
+        if (tgt == null || tgt.isBlank())
+            throw new IllegalArgumentException("GOTO_LABEL requires arg gotoLabel.");
+        return new GotoLabel(label, tgt.trim());
     }
 }

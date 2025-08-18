@@ -7,8 +7,8 @@ import java.util.OptionalInt;
 
 public final class Program {
     private final String name;
-    private final List<Instruction> instructions;      // immutable order
-    private final Map<String, Integer> firstLabelIndex; // label -> FIRST occurrence index
+    private final List<Instruction> instructions;
+    private final Map<String, Integer> firstLabelIndex;
 
 
     public Program(String name, List<Instruction> instructions) {
@@ -20,7 +20,6 @@ public final class Program {
     public String getName() { return name; }
     public List<Instruction> getInstructions() { return instructions; }
 
-    /** Return index of FIRST instruction with that label, or empty if none. */
     public OptionalInt lookupLabel(String label) {
         Integer idx = firstLabelIndex.get(label);
         return idx == null ? OptionalInt.empty() : OptionalInt.of(idx);
@@ -31,7 +30,7 @@ public final class Program {
         for (int i = 0; i < insns.size(); i++) {
             String lbl = insns.get(i).getLabel();
             if (lbl != null && !lbl.isBlank() && !map.containsKey(lbl)) {
-                map.put(lbl, i); // FIRST wins (spec: if multiple exist, jump to the first)
+                map.put(lbl, i); // FIRST wins
             }
         }
         return map;
