@@ -5,15 +5,15 @@ import s.emulator.core.Instruction;
 
 import java.util.Map;
 
-public final class NoOp implements Instruction {
+public final class Neutral implements Instruction {
     private final String label;
     private final String var; // per spec: "V <- V" (we’ll just read it and write back)
 
-    public NoOp(String label, String var) {
+    public Neutral(String label, String var) {
         this.label = label;
         this.var = var;
     }
-    private NoOp() { this.label = null; this.var = null; }
+    private Neutral() { this.label = null; this.var = null; }
 
 
     @Override public String getLabel() { return label; }
@@ -30,6 +30,6 @@ public final class NoOp implements Instruction {
     public Instruction buildFromXml(String label, String variable, Map<String,String> args) {
         if (variable == null || variable.isBlank())
             throw new IllegalArgumentException("NEUTRAL requires <S-Variable>.");
-        return new NoOp(label, variable);
+        return new Neutral(label, variable);
     }
 }

@@ -2,7 +2,10 @@ package s.emulator.core.instructions;
 
 import s.emulator.core.ExecutionManager;
 import s.emulator.core.Instruction;
+import s.emulator.core.expansion.ExpansionContext;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public final class JumpZero implements Instruction {
@@ -37,5 +40,21 @@ public final class JumpZero implements Instruction {
         if (tgt == null || tgt.isBlank())
             throw new IllegalArgumentException("JUMP_ZERO requires arg JZLabel.");
         return new JumpZero(label, variable, tgt.trim());
+    }
+
+    @Override
+    public boolean isBasic() {
+        return false;
+    }
+
+    @Override
+    public List<Instruction> expand(ExpansionContext ctx) {
+        List<Instruction> out = new ArrayList<>();
+        final String skip = ctx.freshLabel();
+
+        out.add(new JumpNotZero(label, var, skip));
+        out.add(new GotoLabel(null, targetLabel));
+        out.add(new Neutral(skip, var));
+        return out;
     }
 }

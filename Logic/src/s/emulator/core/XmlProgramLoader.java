@@ -3,10 +3,7 @@ package s.emulator.core;
 
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.Unmarshaller;
-import s.emulator.core.instructions.Decrease;
-import s.emulator.core.instructions.Increase;
 import s.emulator.core.instructions.JumpNotZero;
-import s.emulator.core.instructions.NoOp;
 import s.emulator.jaxb.*;
 
 import java.io.File;
@@ -40,15 +37,12 @@ public class XmlProgramLoader {
             final String label    = safeTrim(si.getSLabel(), null);
             final Map<String,String> args = toArgMap(si.getSInstructionArguments());
 
-            // 1) find the class by naming convention
             Class<?> cls = resolveInstructionClass(opcode, typeHint);
 
-            // 2) create a prototype via its PRIVATE no-arg ctor
             var ctor = cls.getDeclaredConstructor();
             ctor.setAccessible(true);
             Instruction proto = (Instruction) ctor.newInstance();
 
-            // 3) ask it to build a configured instance from XML
             Instruction insn = proto.buildFromXml(label, variable, args);
 
             code.add(insn);

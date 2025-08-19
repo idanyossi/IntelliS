@@ -2,7 +2,10 @@ package s.emulator.core.instructions;
 
 import s.emulator.core.ExecutionManager;
 import s.emulator.core.Instruction;
+import s.emulator.core.expansion.ExpansionContext;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public final class JumpEqualConstant implements Instruction {
@@ -56,5 +59,45 @@ public final class JumpEqualConstant implements Instruction {
         try { k = Integer.parseInt(val.trim()); if (k < 0) throw new NumberFormatException(); }
         catch (NumberFormatException e) { throw new IllegalArgumentException("constantValue must be a natural number (>=0)."); }
         return new JumpEqualConstant(label, variable, k, tgt.trim());
+    }
+
+    @Override
+    public boolean isBasic() {
+        return false;
+    }
+
+    @Override
+    public List<Instruction> expand(ExpansionContext ctx) {
+        List<Instruction> out = new ArrayList<>();
+
+        if (k == 0) {
+            // shortcut to JumpZero
+            final String skip = ctx.freshLabel();
+            out.add(new JumpNotZero(label, var, skip));
+            out.add(new GotoLabel(null, targetLabel));
+            out.add(new Neutral(skip, var));
+            return out;
+        }
+
+        final String z    = ctx.freshZ();
+        final String L1   = ctx.freshLabel();
+        final String L2   = ctx.freshLabel();
+        final String L3   = ctx.freshLabel();
+        final String Lend = ctx.freshLabel();
+
+        out.add(new ConstantAssignment(label, z, k));
+        out.add(new JumpNotZero(L1, z, L2));
+        out.add(new JumpNotZero(null, var, Lend));
+        out.add(new GotoLabel(null, targetLabel));
+
+        out.add(new Decrease(L2, var));
+        out.add(new JumpNotZero(null, var, L3));
+        out.add(new GotoLabel(null, Lend));
+
+        out.add(new Decrease(L3, z));
+        out.add(new GotoLabel(null, L1));
+
+        out.add(new Neutral(Lend, var));
+        return out;
     }
 }

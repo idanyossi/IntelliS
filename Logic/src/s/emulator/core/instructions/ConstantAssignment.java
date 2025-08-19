@@ -2,7 +2,10 @@ package s.emulator.core.instructions;
 
 import s.emulator.core.ExecutionManager;
 import s.emulator.core.Instruction;
+import s.emulator.core.expansion.ExpansionContext;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public final class ConstantAssignment implements Instruction {
@@ -45,5 +48,20 @@ public final class ConstantAssignment implements Instruction {
         try { k = Integer.parseInt(val.trim()); if (k < 0) throw new NumberFormatException(); }
         catch (NumberFormatException e) { throw new IllegalArgumentException("constantValue must be a natural number (>=0)."); }
         return new ConstantAssignment(label, variable, k);
+    }
+
+    @Override
+    public boolean isBasic() {
+        return false;
+    }
+
+    @Override
+    public List<Instruction> expand(ExpansionContext ctx) {
+        List<Instruction> out = new ArrayList<>();
+        out.add(new ZeroVariable(label, var));
+        for (int i = 0; i < k; i++) {
+            out.add(new Increase(null, var));
+        }
+        return out;
     }
 }

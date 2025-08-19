@@ -19,7 +19,7 @@ public final class JumpNotZero implements Instruction {
     private JumpNotZero() { this.label=null; this.var=null; this.target=null; }
 
     @Override public String getLabel() { return label; }
-    @Override public int getCycles() { return 2; }  // as in your example
+    @Override public int getCycles() { return 2; }
 
     @Override
     public void execute(ExecutionManager em) {
@@ -32,8 +32,6 @@ public final class JumpNotZero implements Instruction {
             }
             OptionalInt idx = em.getProgram().lookupLabel(target);
             if (idx.isEmpty()) {
-                // Spec: illegal program if jumping to a non-existent label.
-                // We'll stop gracefully and (optionally) you can throw an exception here.
                 throw new IllegalStateException("Unknown label: " + target);
             }
             em.setPC(idx.getAsInt());

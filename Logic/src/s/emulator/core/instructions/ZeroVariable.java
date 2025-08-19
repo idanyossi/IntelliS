@@ -2,9 +2,11 @@ package s.emulator.core.instructions;
 
 import s.emulator.core.ExecutionManager;
 import s.emulator.core.Instruction;
+import s.emulator.core.expansion.ExpansionContext;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 public final class ZeroVariable implements Instruction {
     private final String label;
@@ -34,5 +36,28 @@ public final class ZeroVariable implements Instruction {
         if (variable == null || variable.isBlank())
             throw new IllegalArgumentException("ZERO_VARIABLE requires <S-Variable>.");
         return new ZeroVariable(label, variable);
+    }
+
+    @Override
+    public boolean isBasic() {
+        return false;
+    }
+
+    @Override
+    public List<Instruction> expand(ExpansionContext ctx) {
+        List<Instruction> out = new ArrayList<>();
+
+        final String check = (label != null && !label.isBlank()) ? label : ctx.freshLabel();
+        final String dec   = ctx.freshLabel();
+        final String done  = ctx.freshLabel();
+
+        out.add(new JumpNotZero(check, var, dec));
+        out.add(new GotoLabel(null, done));
+
+        out.add(new Decrease(dec, var));
+        out.add(new GotoLabel(null, check));
+
+        out.add(new Neutral(done, var));
+        return out;
     }
 }
