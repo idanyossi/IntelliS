@@ -9,7 +9,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ExpandPrinter {
+public final class ExpandPrinter {
+
     private static final class Node {
         final int originIndex;      // index of the original (degree 0) instruction
         final Instruction ins;
@@ -17,55 +18,69 @@ public class ExpandPrinter {
     }
 
     public static void printExpandedHorizontally(Program program, int degree) {
-        // 1) Take a snapshot of original code (degree 0).
         final List<Instruction> original = program.getInstructions();
 
-        // 2) Attach an "origin index" to every instruction, then expand for D rounds.
+        // degree 0: print only origin, no tails
+        if (degree <= 0) {
+            for (int i = 0; i < original.size(); i++) {
+                System.out.println(ProgramPrinter.formatOne(i + 1, original.get(i)));
+            }
+            System.out.println();
+            return;
+        }
+
+        // Build origin-tagged nodes and expand for D rounds (only synthetics expand)
         List<Node> nodes = new ArrayList<>(original.size());
         for (int i = 0; i < original.size(); i++) nodes.add(new Node(i, original.get(i)));
 
-        if (degree > 0) {
-            ExpansionContext ctx = ExpansionContext.fromProgram(program);
-            for (int d = 0; d < degree; d++) {
-                boolean changed = false;
-                List<Node> next = new ArrayList<>();
-                for (Node n : nodes) {
-                    if (n.ins.isBasic()) {
-                        next.add(n);
-                    } else {
-                        List<Instruction> children = n.ins.expand(ctx);
-                        for (Instruction c : children) next.add(new Node(n.originIndex, c));
-                        changed = true;
-                    }
+        ExpansionContext ctx = ExpansionContext.fromProgram(program);
+        for (int d = 0; d < degree; d++) {
+            boolean changed = false;
+            List<Node> next = new ArrayList<>();
+            for (Node n : nodes) {
+                if (n.ins.isBasic()) {
+                    next.add(n); // basics remain as-is
+                } else {
+                    List<Instruction> children = n.ins.expand(ctx);
+                    for (Instruction c : children) next.add(new Node(n.originIndex, c));
+                    changed = true;
                 }
-                nodes = next;
-                if (!changed) break; // fully basic
             }
+            nodes = next;
+            if (!changed) break; // fully basic already
         }
 
-        // 3) Number final list 1..N (the #<number> shown for children).
-        //    Group children by their origin index, preserving order of appearance.
+        // Map final positions to each origin (preserve final program order)
         Map<Integer, List<Integer>> byOrigin = new LinkedHashMap<>();
         for (int pos = 0; pos < nodes.size(); pos++) {
             Node n = nodes.get(pos);
             byOrigin.computeIfAbsent(n.originIndex, k -> new ArrayList<>()).add(pos);
         }
 
-        // 4) Print one row per original instruction.
+        // Print one row per original
         for (int origin = 0; origin < original.size(); origin++) {
-            StringBuilder line = new StringBuilder();
-            // original segment uses its original number (origin+1)
-            line.append(ProgramPrinter.formatOne(origin + 1, original.get(origin)));
+            Instruction origIns = original.get(origin);
+            StringBuilder line = new StringBuilder(ProgramPrinter.formatOne(origin + 1, origIns));
 
             List<Integer> positions = byOrigin.get(origin);
+            // Decide whether to show a tail:
+            // show tail iff the final block is different from "just the original itself"
+            boolean showTail = false;
             if (positions != null && !positions.isEmpty()) {
+                if (positions.size() > 1) {
+                    showTail = true; // clearly expanded to multiple
+                } else {
+                    // single element: show tail only if it's NOT the same instance as the origin
+                    Instruction only = nodes.get(positions.get(0)).ins;
+                    if (only != origIns) showTail = true;
+                }
+            }
+
+            if (showTail) {
                 for (int pos : positions) {
                     Instruction child = nodes.get(pos).ins;
                     line.append("  >>>  ").append(ProgramPrinter.formatOne(pos + 1, child));
                 }
-            } else {
-                // nothing expanded out of this instruction at this degree
-                // (still print only the origin segment)
             }
 
             System.out.println(line);

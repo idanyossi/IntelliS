@@ -1,20 +1,36 @@
 package ui;
 
-import s.emulator.core.ExecutionManager;
-import s.emulator.core.Interpreter;
-import s.emulator.core.Program;
-import s.emulator.core.XmlProgramLoader;
+import s.emulator.core.*;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
+import java.lang.reflect.Field;
+import java.util.*;
 
 import static ui.ExpandPrinter.printExpandedHorizontally;
 
 public class ConsoleApp {
 
     private Program current;
+    private final List<RunRecord> history = new ArrayList<>();
+
+
+    public final class RunRecord {
+        private final int runNo;
+        private final int degree;
+        private final List<String> xNames;   // x1,x2,...
+        private final List<Integer> xValues; // aligned with xNames
+        private final int y;
+        private final long cycles;
+
+        RunRecord(int runNo, int degree, List<String> xNames, List<Integer> xValues, int y, long cycles) {
+            this.runNo = runNo;
+            this.degree = degree;
+            this.xNames = List.copyOf(xNames);
+            this.xValues = List.copyOf(xValues);
+            this.y = y;
+            this.cycles = cycles;
+        }
+    }
 
     public static void main(String[] args) {
         new ConsoleApp().run();
@@ -29,7 +45,8 @@ public class ConsoleApp {
                 2) Show code from file
                 3) Run program
                 4) Run with degree
-                5) Close program
+                5) Show history/statistics
+                6) Close program
                 """);
             System.out.print("> ");
             String choice = sc.nextLine().trim();
@@ -37,9 +54,10 @@ public class ConsoleApp {
                 switch (choice) {
                     case "1" -> doLoad(sc);
                     case "2" -> doShow();
-                    case "3" -> doRun(sc, 0);
-                    case "4" -> doRunWithDegree(sc);
-                    case "5" -> System.exit(0);
+                    case "3" -> doRun(sc, 0);          // quiet
+                    case "4" -> doRunWithDegree(sc);   // quiet
+                    case "5" -> doHistory();
+                    case "6" -> System.exit(0);
                     default -> System.out.println("Unknown option");
                 }
             } catch (Exception e) {
@@ -57,6 +75,7 @@ public class ConsoleApp {
         System.out.print("Enter XML path: ");
         String path = sc.nextLine().trim();
         current = new XmlProgramLoader().load(new File(path));
+        history.clear(); // new program -> reset history
         System.out.println("Loaded program: " + current.getName());
     }
 
@@ -73,42 +92,112 @@ public class ConsoleApp {
         System.out.print("Pick degree [0.." + max + "]: ");
         int d = parseIntInRange(sc.nextLine(), 0, max);
 
+        // Optional preview; comment out if you don't want any code shown before running
         System.out.println("\nExpanded (horizontal) to degree " + d + ":");
         printExpandedHorizontally(current, d);
-        doRun(sc, d);
+
+        doRun(sc, d); // quiet run (results only)
     }
 
     private void doRun(Scanner sc, int degree) {
         needProgram();
 
-        // 1) Ask inputs (CSV)
-        var inputs = askInputs(sc);
-
-        // 2) Expand to degree
+        // Expand first so we can compute exactly which inputs this run needs
         Program toRun = current.expandToDegree(degree);
 
-        // 3) Run
+        // Collect the x-variables used by THIS expanded program (sorted: x1,x2,...)
+        List<String> usedXs = collectInputVars(toRun.getInstructions());
+
+        // Prompt user for values for those specific x's (aligned, missing -> 0)
+        List<Integer> values = askInputsForXs(sc, usedXs);
+
+        // Execute
         ExecutionManager em = new ExecutionManager(toRun);
-        for (int i = 0; i < inputs.size(); i++) {
-            em.setVar("x" + (i + 1), inputs.get(i));
+        for (int i = 0; i < usedXs.size(); i++) {
+            em.setVar(usedXs.get(i), values.get(i));
         }
         Interpreter.run(em);
 
-        System.out.println("\nProgram actually executed (degree " + degree + "):");
-        ProgramPrinter.printProgram(toRun, toRun.getInstructions());
-
-        // 5) Show results
+        // Results only
         System.out.println("y = " + em.getVar("y"));
         System.out.println("Variables:");
         em.snapshotVars().forEach((k, v) -> System.out.println("  " + k + " = " + v));
         System.out.println("Total cycles: " + em.getTotalCycles());
+
+        // Save run in history
+        history.add(new RunRecord(
+                history.size() + 1,
+                degree,
+                usedXs,
+                values,
+                em.getVar("y"),
+                em.getTotalCycles()
+        ));
     }
 
-    private static List<Integer> askInputs(Scanner sc) {
-        System.out.print("Inputs CSV (e.g., 4,7,0) — blank for none: ");
+    private void doHistory() {
+        needProgram();
+        if (history.isEmpty()) {
+            System.out.println("No runs yet for program: " + current.getName());
+            return;
+        }
+        System.out.println("Run | Degree | Inputs                    | y  | Cycles");
+        System.out.println("----+--------+---------------------------+----+--------");
+        for (RunRecord r : history) {
+            String inputs = r.xNames.isEmpty()
+                    ? "-"
+                    : formatInputs(r.xNames, r.xValues);
+            System.out.printf("%3d | %6d | %-25s | %2d | %6d%n",
+                    r.runNo, r.degree, inputs, r.y, r.cycles);
+        }
+    }
+
+    private static String formatInputs(List<String> names, List<Integer> vals) {
+        List<String> pairs = new ArrayList<>(names.size());
+        for (int i = 0; i < names.size(); i++) {
+            int v = (i < vals.size()) ? vals.get(i) : 0;
+            pairs.add(names.get(i) + "=" + v);
+        }
+        return String.join(", ", pairs);
+    }
+
+    /** Collect unique x-variables referenced by the code, sorted by numeric index (x1,x2,x5,...) */
+    private static List<String> collectInputVars(List<Instruction> code) {
+        TreeSet<String> set = new TreeSet<>(Comparator.comparingInt(ConsoleApp::xIndex));
+        for (Instruction ins : code) {
+            for (Field f : ins.getClass().getDeclaredFields()) {
+                if (f.getType() != String.class) continue;
+                f.setAccessible(true);
+                try {
+                    Object v = f.get(ins);
+                    if (v instanceof String s && s.startsWith("x")) set.add(s);
+                } catch (Exception ignore) {}
+            }
+        }
+        return new ArrayList<>(set);
+    }
+
+    /** Prompt user to enter values for the exact x's in order (missing → 0, extra → ignored). */
+    private static List<Integer> askInputsForXs(Scanner sc, List<String> usedXs) {
+        if (usedXs.isEmpty()) {
+            System.out.println("This program does not use any x inputs.");
+            return List.of();
+        }
+        String promptList = String.join(",", usedXs);
+        System.out.printf("Please enter values for %s (CSV, in this order): ", promptList);
         String line = sc.nextLine().trim();
-        if (line.isEmpty()) return List.of();
-        String[] parts = line.split(",");
+
+        List<Integer> parsed = parseCsvInts(line);
+        List<Integer> aligned = new ArrayList<>(usedXs.size());
+        for (int i = 0; i < usedXs.size(); i++) {
+            aligned.add(i < parsed.size() ? parsed.get(i) : 0);
+        }
+        return aligned;
+    }
+
+    private static List<Integer> parseCsvInts(String csv) {
+        if (csv.isBlank()) return List.of();
+        String[] parts = csv.split(",");
         List<Integer> out = new ArrayList<>(parts.length);
         for (String p : parts) {
             p = p.trim();
@@ -125,6 +214,11 @@ public class ConsoleApp {
         catch (NumberFormatException e) { throw new IllegalArgumentException("Not a number: " + s); }
         if (v < lo || v > hi) throw new IllegalArgumentException("Out of range [" + lo + ".." + hi + "]: " + v);
         return v;
+    }
+
+    private static int xIndex(String x) {
+        try { return Integer.parseInt(x.substring(1)); }
+        catch (Exception e) { return Integer.MAX_VALUE; }
     }
 }
 
