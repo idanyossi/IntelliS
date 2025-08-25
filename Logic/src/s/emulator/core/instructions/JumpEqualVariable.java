@@ -64,29 +64,24 @@ public final class JumpEqualVariable implements Instruction {
     @Override
     public List<Instruction> expand(ExpansionContext ctx) {
         List<Instruction> out = new ArrayList<>();
+        String t1 = ctx.freshZ();
+        String t2 = ctx.freshZ();
+        String L2 = ctx.freshLabel();
+        String L1 = ctx.freshLabel();
+        String L3 = ctx.freshLabel();
 
-        final String z1   = ctx.freshZ();
-        final String z2   = ctx.freshZ();
-        final String L1   = ctx.freshLabel();
-        final String L2   = ctx.freshLabel();
-        final String L3   = ctx.freshLabel();
-        final String Lend = ctx.freshLabel();
+        out.add(new Assignment(label, t1, Vara));
+        out.add(new Assignment(null,  t2, Varb));
 
-        out.add(new Assignment(label, z1, Vara));
-        out.add(new Assignment(null,  z2, Varb));
+        out.add(new JumpZero(L2, t1, L3));
+        out.add(new JumpZero(null, t2, L1));
+        out.add(new Decrease(null, t1));
+        out.add(new Decrease(null, t2));
+        out.add(new GotoLabel(null, L2));
 
-        out.add(new JumpNotZero(L1, z1, L2));
-        out.add(new JumpNotZero(null, z2, Lend));
-        out.add(new GotoLabel(null, targetLabel));
+        out.add(new JumpZero(L3, t2, targetLabel));
 
-        out.add(new JumpNotZero(L2, z2, L3));
-        out.add(new GotoLabel(null, Lend));
-
-        out.add(new Decrease(L3, z1));
-        out.add(new Decrease(null, z2));
-        out.add(new GotoLabel(null, L1));
-
-        out.add(new Neutral(Lend, Vara));
+        out.add(new Neutral(L1, t1));
         return out;
     }
 }

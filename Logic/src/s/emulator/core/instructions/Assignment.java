@@ -50,32 +50,26 @@ public final class Assignment implements Instruction {
     @Override
     public List<Instruction> expand(ExpansionContext ctx) {
         List<Instruction> out = new ArrayList<>();
-
-        final String tmp   = ctx.freshZ();
-        final String L1    = ctx.freshLabel();
-        final String L2    = ctx.freshLabel();
-        final String Lafter= ctx.freshLabel();
-        final String L3    = ctx.freshLabel();
-        final String L4    = ctx.freshLabel();
-        final String Lend  = ctx.freshLabel();
+        String t  = ctx.freshZ();
+        String L1 = ctx.freshLabel();
+        String L2 = ctx.freshLabel();
+        String L3 = ctx.freshLabel();
 
         out.add(new ZeroVariable(label, destination));
 
-        out.add(new JumpNotZero(L1, source, L2));
-        out.add(new GotoLabel(null, Lafter));
-        out.add(new Decrease(L2, source));
-        out.add(new Increase(null, tmp));
-        out.add(new GotoLabel(null, L1));
-        out.add(new Neutral(Lafter, destination));
-
-        out.add(new JumpNotZero(L3, tmp, L4));
-        out.add(new GotoLabel(null, Lend));
-        out.add(new Increase(L4, source));
-        out.add(new Increase(null, destination));
-        out.add(new Decrease(null, tmp));
+        out.add(new JumpNotZero(null, source, L1));
         out.add(new GotoLabel(null, L3));
 
-        out.add(new Neutral(Lend, destination));
+        out.add(new Decrease(L1, source));
+        out.add(new Increase(null, t));
+        out.add(new JumpNotZero(null, source, L1));
+
+        out.add(new Increase(L2, destination));
+        out.add(new Increase(null, source));
+        out.add(new Decrease(null, t));
+        out.add(new JumpNotZero(null, t, L2));
+
+        out.add(new Neutral(L3, destination));
         return out;
     }
 }

@@ -84,4 +84,33 @@ public class ConsolePrinters {
         }
         return sb.toString();
     }
+
+    static void printExpansionDerivations(Dtos.ExpansionPreview p) {
+        System.out.println("\nExpanded (derivations) to degree " + p.getDegree() + ":");
+
+        boolean printedAny = false;
+        for (var row : p.getRows()) {
+            var origin = row.getOrigin();
+            var tail   = row.getTail();
+            if (origin.isBasic() || tail == null || tail.isEmpty()) {
+                continue; // only synthetics with actual expansion
+            }
+            for (var child : tail) {
+                System.out.println(formatBare(child) + "  <<<  " + formatBare(origin));
+                printedAny = true;
+            }
+        }
+
+        if (!printedAny) {
+            System.out.println("(no synthetic expansions at this degree)");
+        }
+        System.out.println();
+    }
+
+    // minimal one-line format: "#<n> <display>"
+    private static String formatBare(Dtos.InstructionLine l) {
+        return String.format("#%d %s", l.getLineNumber(), l.getDisplay());
+    }
+
+
 }

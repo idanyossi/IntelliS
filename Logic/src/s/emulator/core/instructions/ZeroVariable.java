@@ -48,18 +48,9 @@ public final class ZeroVariable implements Instruction {
     @Override
     public List<Instruction> expand(ExpansionContext ctx) {
         List<Instruction> out = new ArrayList<>();
-
-        final String check = (label != null && !label.isBlank()) ? label : ctx.freshLabel();
-        final String dec   = ctx.freshLabel();
-        final String done  = ctx.freshLabel();
-
-        out.add(new JumpNotZero(check, var, dec));
-        out.add(new GotoLabel(null, done));
-
-        out.add(new Decrease(dec, var));
-        out.add(new GotoLabel(null, check));
-
-        out.add(new Neutral(done, var));
+        String loop = (label != null && !label.isBlank()) ? label : ctx.freshLabel();
+        out.add(new Decrease(loop, var));
+        out.add(new JumpNotZero(null, var, loop));
         return out;
     }
 }

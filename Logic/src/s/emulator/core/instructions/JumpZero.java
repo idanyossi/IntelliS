@@ -52,11 +52,10 @@ public final class JumpZero implements Instruction {
     @Override
     public List<Instruction> expand(ExpansionContext ctx) {
         List<Instruction> out = new ArrayList<>();
-        final String skip = ctx.freshLabel();
-
-        out.add(new JumpNotZero(label, var, skip));
+        String L1 = ctx.freshLabel();
+        out.add(new JumpNotZero(label, var, L1));
         out.add(new GotoLabel(null, targetLabel));
-        out.add(new Neutral(skip, var));
+        out.add(new Neutral(L1, var));
         return out;
     }
 }

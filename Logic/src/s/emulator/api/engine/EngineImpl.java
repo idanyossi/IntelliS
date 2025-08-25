@@ -280,4 +280,18 @@ public class EngineImpl implements Engine {
         try { return Integer.parseInt(L.substring(1)); }
         catch (Exception e) { return Integer.MAX_VALUE; }
     }
+
+    @Override
+    public Dtos.ProgramSummary getProgramSummary(int degree) {
+        ensureLoaded();
+        int d = Math.max(0, degree);
+        Program p = current.expandToDegree(d);
+        var code = p.getInstructions();
+        return Dtos.ProgramSummary.of(
+                current.getName(),
+                collectInputs(code),
+                collectLabels(code),
+                toLines(code)
+        );
+    }
 }

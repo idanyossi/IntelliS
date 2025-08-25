@@ -22,4 +22,6 @@ public interface Engine {
 
     List<Dtos.RunHistoryEntry> getHistory();
     void clearHistory();
+
+    Dtos.ProgramSummary getProgramSummary(int degree);
 }

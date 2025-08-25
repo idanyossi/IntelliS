@@ -71,35 +71,21 @@ public final class JumpEqualConstant implements Instruction {
     @Override
     public List<Instruction> expand(ExpansionContext ctx) {
         List<Instruction> out = new ArrayList<>();
+        final String t  = ctx.freshZ();       // temp z
+        final String L1 = ctx.freshLabel();   // not-equal sink
 
-        if (k == 0) {
-            // shortcut to JumpZero
-            final String skip = ctx.freshLabel();
-            out.add(new JumpNotZero(label, var, skip));
-            out.add(new GotoLabel(null, targetLabel));
-            out.add(new Neutral(skip, var));
-            return out;
+        out.add(new Assignment(label, t, var));
+
+        for (int i = 0; i < k; i++) {
+            out.add(new JumpZero(null, t, L1));
+            out.add(new Decrease(null, t));
         }
 
-        final String z    = ctx.freshZ();
-        final String L1   = ctx.freshLabel();
-        final String L2   = ctx.freshLabel();
-        final String L3   = ctx.freshLabel();
-        final String Lend = ctx.freshLabel();
+        out.add(new JumpNotZero(null, t, L1));
 
-        out.add(new ConstantAssignment(label, z, k));
-        out.add(new JumpNotZero(L1, z, L2));
-        out.add(new JumpNotZero(null, var, Lend));
         out.add(new GotoLabel(null, targetLabel));
 
-        out.add(new Decrease(L2, var));
-        out.add(new JumpNotZero(null, var, L3));
-        out.add(new GotoLabel(null, Lend));
-
-        out.add(new Decrease(L3, z));
-        out.add(new GotoLabel(null, L1));
-
-        out.add(new Neutral(Lend, var));
+        out.add(new Neutral(L1, "y"));
         return out;
     }
 }
