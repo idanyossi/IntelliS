@@ -21,7 +21,7 @@ public final class Assignment implements Instruction {
     private Assignment() { this.label=null; this.destination=null; this.source=null; }
 
     @Override public String getLabel() { return label; }
-    @Override public int getCycles() {return 4;}
+    @Override public int getCycles() { return 4; }
 
     @Override
     public void execute(ExecutionManager executionManager) {

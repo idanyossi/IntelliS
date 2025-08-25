@@ -1,6 +1,7 @@
 package ui;
 
 import s.emulator.core.*;
+import s.emulator.core.expansion.ExpansionContext;
 
 import java.io.File;
 import java.lang.reflect.Field;
@@ -219,6 +220,48 @@ public class ConsoleApp {
     private static int xIndex(String x) {
         try { return Integer.parseInt(x.substring(1)); }
         catch (Exception e) { return Integer.MAX_VALUE; }
+    }
+
+    private void doDebugDegrees() {
+        needProgram();
+        System.out.println("Per-instruction degrees for: " + current.getName());
+        var code = current.getInstructions();
+        int max = 0;
+        for (int i = 0; i < code.size(); i++) {
+            Instruction ins = code.get(i);
+            int deg = instructionDegree(current, ins); // fresh ctx per origin
+            max = Math.max(max, deg);
+            // Show the exact UI line + degree
+            System.out.printf("%s   -- degree=%d%n",
+                    ProgramPrinter.formatOne(i + 1, ins), deg);
+        }
+        System.out.println("Max degree (computed here): " + max);
+        System.out.println("Max degree (Program.maxExpansionDegree()): " + current.maxExpansionDegree());
+    }
+
+    private static int instructionDegree(Program p, Instruction ins) {
+        return degreeOf(ins, ExpansionContext.fromProgram(p));
+    }
+
+    /** Degree = how many expansion rounds until this tree becomes all basic. */
+    private static int degreeOf(Instruction ins, ExpansionContext ctx) {
+        if (ins.isBasic()) return 0;
+        int max = 0;
+        for (Instruction child : ins.expand(ctx)) {
+            max = Math.max(max, degreeOf(child, ctx));
+        }
+        return 1 + max;
+    }
+
+    private void debugIsBasicFlags() {
+        needProgram();
+        var code = current.getInstructions();
+        System.out.println("isBasic() flags at degree 0:");
+        for (int i = 0; i < code.size(); i++) {
+            var ins = code.get(i);
+            System.out.printf("#%d %-24s isBasic=%s  ->  %s%n",
+                    i+1, ins.getClass().getSimpleName(), ins.isBasic(), ProgramPrinter.formatOne(i+1, ins));
+        }
     }
 }
 
