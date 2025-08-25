@@ -20,6 +20,8 @@ public final class Assignment implements Instruction {
     }
     private Assignment() { this.label=null; this.destination=null; this.source=null; }
 
+    @Override public String toDisplayString() { return destination + " <- " + source; }
+
     @Override public String getLabel() { return label; }
     @Override public int getCycles() { return 4; }
 

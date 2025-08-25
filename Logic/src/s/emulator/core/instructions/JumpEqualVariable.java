@@ -22,6 +22,8 @@ public final class JumpEqualVariable implements Instruction {
     }
     private JumpEqualVariable() { this.label=null; this.Vara=null; this.Varb=null; this.targetLabel=null; }
 
+    @Override public String toDisplayString() { return "IF " + Vara + " = " + Varb + " GOTO " + targetLabel; }
+
     @Override public String getLabel() { return label; }
     @Override public int getCycles() {  return 2; }
 

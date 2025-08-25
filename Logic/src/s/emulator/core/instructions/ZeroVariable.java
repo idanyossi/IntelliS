@@ -18,6 +18,8 @@ public final class ZeroVariable implements Instruction {
     }
     private ZeroVariable() { this.label=null; this.var=null; }
 
+    @Override public String toDisplayString() { return var + " <- 0"; }
+
     @Override public String getLabel() { return label; }
     @Override public int getCycles() {return 1; }
 

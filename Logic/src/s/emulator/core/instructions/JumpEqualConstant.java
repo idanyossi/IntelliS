@@ -22,6 +22,8 @@ public final class JumpEqualConstant implements Instruction {
     }
     private JumpEqualConstant() { this.label=null; this.var=null; this.k=0; this.targetLabel=null; }
 
+    @Override public String toDisplayString() { return "IF " + var + " = " + k + " GOTO " + targetLabel; }
+
     @Override public String getLabel() {return label;}
     @Override public int getCycles() {return 2;}
 

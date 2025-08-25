@@ -18,6 +18,8 @@ public final class GotoLabel implements Instruction {
     }
     private GotoLabel() { this.label=null; this.targetLabel=null; }
 
+    @Override public String toDisplayString() { return "GOTO " + targetLabel; }
+
     @Override public String getLabel() {return label;}
     @Override public int getCycles() {return 1;}
 

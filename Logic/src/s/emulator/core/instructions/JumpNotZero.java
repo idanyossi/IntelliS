@@ -18,6 +18,8 @@ public final class JumpNotZero implements Instruction {
     }
     private JumpNotZero() { this.label=null; this.var=null; this.target=null; }
 
+    @Override public String toDisplayString() { return "IF " + var + " != 0 GOTO " + target; }
+
     @Override public String getLabel() { return label; }
     @Override public int getCycles() { return 2; }
 

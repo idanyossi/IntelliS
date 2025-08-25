@@ -1,37 +1,16 @@
 package ui;
 
+import s.emulator.api.Engine;
+import s.emulator.api.dto.Dtos;
+import s.emulator.api.engine.EngineImpl;
 import s.emulator.core.*;
-import s.emulator.core.expansion.ExpansionContext;
 
 import java.io.File;
-import java.lang.reflect.Field;
 import java.util.*;
-
-import static ui.ExpandPrinter.printExpandedHorizontally;
 
 public class ConsoleApp {
 
-    private Program current;
-    private final List<RunRecord> history = new ArrayList<>();
-
-
-    public final class RunRecord {
-        private final int runNo;
-        private final int degree;
-        private final List<String> xNames;   // x1,x2,...
-        private final List<Integer> xValues; // aligned with xNames
-        private final int y;
-        private final long cycles;
-
-        RunRecord(int runNo, int degree, List<String> xNames, List<Integer> xValues, int y, long cycles) {
-            this.runNo = runNo;
-            this.degree = degree;
-            this.xNames = List.copyOf(xNames);
-            this.xValues = List.copyOf(xValues);
-            this.y = y;
-            this.cycles = cycles;
-        }
-    }
+    private final Engine engine = new EngineImpl();
 
     public static void main(String[] args) {
         new ConsoleApp().run();
@@ -46,7 +25,7 @@ public class ConsoleApp {
                 2) Show code from file
                 3) Run program
                 4) Run with degree
-                5) Show history/statistics
+                5) Show history
                 6) Close program
                 """);
             System.out.print("> ");
@@ -55,8 +34,8 @@ public class ConsoleApp {
                 switch (choice) {
                     case "1" -> doLoad(sc);
                     case "2" -> doShow();
-                    case "3" -> doRun(sc, 0);          // quiet
-                    case "4" -> doRunWithDegree(sc);   // quiet
+                    case "3" -> doRun(sc, 0);
+                    case "4" -> doRunWithDegree(sc);
                     case "5" -> doHistory();
                     case "6" -> System.exit(0);
                     default -> System.out.println("Unknown option");
@@ -68,145 +47,80 @@ public class ConsoleApp {
         }
     }
 
-    private void needProgram() {
-        if (current == null) throw new IllegalStateException("No valid program loaded.");
+    private void needsProgram() {
+        if (!engine.hasProgram()) throw new IllegalStateException("No valid program loaded.");
     }
 
     private void doLoad(Scanner sc) throws Exception {
         System.out.print("Enter XML path: ");
         String path = sc.nextLine().trim();
-        current = new XmlProgramLoader().load(new File(path));
-        history.clear(); // new program -> reset history
-        System.out.println("Loaded program: " + current.getName());
+        engine.loadProgram(new File(path));
+        System.out.println("Loaded program: " + engine.currentProgramName());
     }
 
     private void doShow() {
-        needProgram();
-        var code = current.getInstructions();
-        ProgramPrinter.printProgram(current, code);
+        needsProgram();
+        Dtos.ProgramSummary sum = engine.getProgramSummary();
+        ConsolePrinters.printProgramSummary(sum);
     }
 
     private void doRunWithDegree(Scanner sc) {
-        needProgram();
-        int max = current.maxExpansionDegree();
+        needsProgram();
+        int max = engine.getMaxDegree();
         System.out.println("Max degree: " + max);
         System.out.print("Pick degree [0.." + max + "]: ");
         int d = parseIntInRange(sc.nextLine(), 0, max);
 
-        // Optional preview; comment out if you don't want any code shown before running
-        System.out.println("\nExpanded (horizontal) to degree " + d + ":");
-        printExpandedHorizontally(current, d);
+        Dtos.ExpansionPreview prev = engine.previewExpansion(d);
+        ConsolePrinters.printExpansion(prev);
 
-        doRun(sc, d); // quiet run (results only)
+        Map<String,Integer> inputs = askInputsFor(sc, engine.getInputsUsed(d));
+
+        Dtos.RunResult rr = engine.run(d, inputs);
+        ConsolePrinters.printRunResult(rr);
     }
 
     private void doRun(Scanner sc, int degree) {
-        needProgram();
+        needsProgram();
 
-        // Expand first so we can compute exactly which inputs this run needs
-        Program toRun = current.expandToDegree(degree);
+        Map<String,Integer> inputs = askInputsFor(sc, engine.getInputsUsed(0));
+        Dtos.RunResult rr = engine.run(degree, inputs);
 
-        // Collect the x-variables used by THIS expanded program (sorted: x1,x2,...)
-        List<String> usedXs = collectInputVars(toRun.getInstructions());
-
-        // Prompt user for values for those specific x's (aligned, missing -> 0)
-        List<Integer> values = askInputsForXs(sc, usedXs);
-
-        // Execute
-        ExecutionManager em = new ExecutionManager(toRun);
-        for (int i = 0; i < usedXs.size(); i++) {
-            em.setVar(usedXs.get(i), values.get(i));
-        }
-        Interpreter.run(em);
-
-        // Results only
-        System.out.println("y = " + em.getVar("y"));
-        System.out.println("Variables:");
-        em.snapshotVars().forEach((k, v) -> System.out.println("  " + k + " = " + v));
-        System.out.println("Total cycles: " + em.getTotalCycles());
-
-        // Save run in history
-        history.add(new RunRecord(
-                history.size() + 1,
-                degree,
-                usedXs,
-                values,
-                em.getVar("y"),
-                em.getTotalCycles()
-        ));
+        ConsolePrinters.printRunResult(rr);
     }
 
     private void doHistory() {
-        needProgram();
-        if (history.isEmpty()) {
-            System.out.println("No runs yet for program: " + current.getName());
-            return;
-        }
-        System.out.println("Run | Degree | Inputs                    | y  | Cycles");
-        System.out.println("----+--------+---------------------------+----+--------");
-        for (RunRecord r : history) {
-            String inputs = r.xNames.isEmpty()
-                    ? "-"
-                    : formatInputs(r.xNames, r.xValues);
-            System.out.printf("%3d | %6d | %-25s | %2d | %6d%n",
-                    r.runNo, r.degree, inputs, r.y, r.cycles);
-        }
+        needsProgram();
+        List<Dtos.RunHistoryEntry> hist = engine.getHistory();
+        ConsolePrinters.printHistory(hist);
     }
 
-    private static String formatInputs(List<String> names, List<Integer> vals) {
-        List<String> pairs = new ArrayList<>(names.size());
-        for (int i = 0; i < names.size(); i++) {
-            int v = (i < vals.size()) ? vals.get(i) : 0;
-            pairs.add(names.get(i) + "=" + v);
-        }
-        return String.join(", ", pairs);
-    }
+    private static Map<String,Integer> askInputsFor(Scanner sc, List<String> xNamesInOrder) {
+        Map<String,Integer> map = new LinkedHashMap<>();
 
-    /** Collect unique x-variables referenced by the code, sorted by numeric index (x1,x2,x5,...) */
-    private static List<String> collectInputVars(List<Instruction> code) {
-        TreeSet<String> set = new TreeSet<>(Comparator.comparingInt(ConsoleApp::xIndex));
-        for (Instruction ins : code) {
-            for (Field f : ins.getClass().getDeclaredFields()) {
-                if (f.getType() != String.class) continue;
-                f.setAccessible(true);
-                try {
-                    Object v = f.get(ins);
-                    if (v instanceof String s && s.startsWith("x")) set.add(s);
-                } catch (Exception ignore) {}
-            }
+        if (xNamesInOrder == null || xNamesInOrder.isEmpty()) {
+            System.out.println("No inputs required for this degree.");
+            return map;
         }
-        return new ArrayList<>(set);
-    }
 
-    /** Prompt user to enter values for the exact x's in order (missing → 0, extra → ignored). */
-    private static List<Integer> askInputsForXs(Scanner sc, List<String> usedXs) {
-        if (usedXs.isEmpty()) {
-            System.out.println("This program does not use any x inputs.");
-            return List.of();
-        }
-        String promptList = String.join(",", usedXs);
-        System.out.printf("Please enter values for %s (CSV, in this order): ", promptList);
+        System.out.println("Please enter values for: " + String.join(",", xNamesInOrder));
+        System.out.print("CSV (e.g., 4,7,0). Blank = all zeros: ");
         String line = sc.nextLine().trim();
 
-        List<Integer> parsed = parseCsvInts(line);
-        List<Integer> aligned = new ArrayList<>(usedXs.size());
-        for (int i = 0; i < usedXs.size(); i++) {
-            aligned.add(i < parsed.size() ? parsed.get(i) : 0);
+        if (line.isEmpty()) {
+            for (String x : xNamesInOrder) map.put(x, 0);
+            return map;
         }
-        return aligned;
-    }
 
-    private static List<Integer> parseCsvInts(String csv) {
-        if (csv.isBlank()) return List.of();
-        String[] parts = csv.split(",");
-        List<Integer> out = new ArrayList<>(parts.length);
-        for (String p : parts) {
-            p = p.trim();
-            if (p.isEmpty()) continue;
-            try { out.add(Integer.parseInt(p)); }
-            catch (NumberFormatException e) { throw new IllegalArgumentException("Bad number: " + p); }
+        String[] parts = line.split(",");
+        for (int i = 0; i < xNamesInOrder.size(); i++) {
+            String token = (i < parts.length) ? parts[i].trim() : "0";
+            int val;
+            try { val = Integer.parseInt(token); }
+            catch (NumberFormatException e) { throw new IllegalArgumentException("Bad number: " + token); }
+            map.put(xNamesInOrder.get(i), Math.max(0, val));
         }
-        return out;
+        return map;
     }
 
     private static int parseIntInRange(String s, int lo, int hi) {
@@ -215,53 +129,6 @@ public class ConsoleApp {
         catch (NumberFormatException e) { throw new IllegalArgumentException("Not a number: " + s); }
         if (v < lo || v > hi) throw new IllegalArgumentException("Out of range [" + lo + ".." + hi + "]: " + v);
         return v;
-    }
-
-    private static int xIndex(String x) {
-        try { return Integer.parseInt(x.substring(1)); }
-        catch (Exception e) { return Integer.MAX_VALUE; }
-    }
-
-    private void doDebugDegrees() {
-        needProgram();
-        System.out.println("Per-instruction degrees for: " + current.getName());
-        var code = current.getInstructions();
-        int max = 0;
-        for (int i = 0; i < code.size(); i++) {
-            Instruction ins = code.get(i);
-            int deg = instructionDegree(current, ins); // fresh ctx per origin
-            max = Math.max(max, deg);
-            // Show the exact UI line + degree
-            System.out.printf("%s   -- degree=%d%n",
-                    ProgramPrinter.formatOne(i + 1, ins), deg);
-        }
-        System.out.println("Max degree (computed here): " + max);
-        System.out.println("Max degree (Program.maxExpansionDegree()): " + current.maxExpansionDegree());
-    }
-
-    private static int instructionDegree(Program p, Instruction ins) {
-        return degreeOf(ins, ExpansionContext.fromProgram(p));
-    }
-
-    /** Degree = how many expansion rounds until this tree becomes all basic. */
-    private static int degreeOf(Instruction ins, ExpansionContext ctx) {
-        if (ins.isBasic()) return 0;
-        int max = 0;
-        for (Instruction child : ins.expand(ctx)) {
-            max = Math.max(max, degreeOf(child, ctx));
-        }
-        return 1 + max;
-    }
-
-    private void debugIsBasicFlags() {
-        needProgram();
-        var code = current.getInstructions();
-        System.out.println("isBasic() flags at degree 0:");
-        for (int i = 0; i < code.size(); i++) {
-            var ins = code.get(i);
-            System.out.printf("#%d %-24s isBasic=%s  ->  %s%n",
-                    i+1, ins.getClass().getSimpleName(), ins.isBasic(), ProgramPrinter.formatOne(i+1, ins));
-        }
     }
 }
 

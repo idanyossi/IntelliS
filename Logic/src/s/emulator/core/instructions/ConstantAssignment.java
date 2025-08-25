@@ -20,6 +20,8 @@ public final class ConstantAssignment implements Instruction {
     }
     private ConstantAssignment() { this.label=null; this.var=null; this.k=0; }
 
+    @Override public String toDisplayString() { return var + " <- " + k; }
+
     @Override public String getLabel() { return label; }
     @Override public int getCycles() { return 2; }
 

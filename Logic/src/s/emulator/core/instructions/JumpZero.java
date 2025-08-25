@@ -20,6 +20,8 @@ public final class JumpZero implements Instruction {
     }
     private JumpZero() { this.label=null; this.var=null; this.targetLabel=null; }
 
+    @Override public String toDisplayString() { return "IF " + var + " = 0 GOTO " + targetLabel; }
+
     @Override public String getLabel() {return label;}
     @Override public int getCycles() {return 2;}
 
