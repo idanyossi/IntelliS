@@ -112,5 +112,32 @@ public class ConsolePrinters {
         return String.format("#%d %s", l.getLineNumber(), l.getDisplay());
     }
 
+    static void printProgramSummaryWithParents(Dtos.ProgramSummary sum, Dtos.ExpansionPreview preview) {
+        System.out.println("Program: " + sum.getProgramName());
+        System.out.println("Inputs: " + String.join(", ", sum.getInputsUsed()));
+        System.out.println("Labels: " + String.join(", ", sum.getLabelsUsed()));
+        System.out.println();
 
+        // Build child -> parent map from the preview (one degree)
+        var parent = new java.util.HashMap<Integer, Dtos.InstructionLine>();
+        if (preview != null && preview.getRows() != null) {
+            for (var row : preview.getRows()) {
+                var origin = row.getOrigin();
+                for (var child : row.getTail()) {
+                    parent.put(child.getLineNumber(), origin);
+                }
+            }
+        }
+
+        // Print each line; if it has a parent, append it after "<<<"
+        for (var line : sum.getInstructions()) {
+            String rendered = formatLine(line);
+            var p = parent.get(line.getLineNumber());
+            if (p != null) {
+                rendered += "  <<<  " + formatLine(p);
+            }
+            System.out.println(rendered);
+        }
+        System.out.println();
+    }
 }
