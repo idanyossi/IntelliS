@@ -160,12 +160,15 @@ public class EngineImpl implements Engine {
                 vars
         );
 
-        List<String> usedXs = getInputsUsed(D);
-        List<Dtos.NameValue> inputsForHistory = new ArrayList<>(usedXs.size());
-        for (String x : usedXs) {
-            int v = (inputsByName == null) ? 0 : inputsByName.getOrDefault(x, 0);
-            inputsForHistory.add(Dtos.NameValue.of(x, v));
-        }
+        List<Dtos.NameValue> inputsForHistory =
+                (inputsByName == null) ? List.of() :
+                        inputsByName.entrySet().stream()
+                                .filter(e -> e.getKey() != null && e.getKey().matches("x\\d+"))
+                                .sorted(Comparator.comparingInt(e -> xIndex(e.getKey())))
+                                .map(e -> Dtos.NameValue.of(
+                                        e.getKey(),
+                                        Math.max(0, e.getValue() == null ? 0 : e.getValue())))
+                                .collect(Collectors.toList());
         history.add(Dtos.RunHistoryEntry.of(
                 history.size() + 1,
                 D,
