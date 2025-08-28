@@ -15,9 +15,10 @@ public final class Neutral implements Instruction {
     }
     private Neutral() { this.label = null; this.var = null; }
 
+    @Override public String toDisplayString() { return var + " <- " + var; }
 
     @Override public String getLabel() { return label; }
-    @Override public int getCycles() { return 1; }
+    @Override public int getCycles() { return 0; }
 
     @Override
     public void execute(ExecutionManager em) {

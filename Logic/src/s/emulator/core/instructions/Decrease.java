@@ -15,6 +15,8 @@ public final class Decrease implements Instruction {
     }
     private Decrease() { this.label = null; this.var = null; }
 
+    @Override public String toDisplayString() { return var + " <- " + var + " - 1"; }
+
     @Override public String getLabel() { return label; }
     @Override public int getCycles() { return 1; }
 

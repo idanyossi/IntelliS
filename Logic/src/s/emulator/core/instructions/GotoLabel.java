@@ -18,6 +18,8 @@ public final class GotoLabel implements Instruction {
     }
     private GotoLabel() { this.label=null; this.targetLabel=null; }
 
+    @Override public String toDisplayString() { return "GOTO " + targetLabel; }
+
     @Override public String getLabel() {return label;}
     @Override public int getCycles() {return 1;}
 
@@ -43,7 +45,7 @@ public final class GotoLabel implements Instruction {
     @Override
     public List<Instruction> expand(ExpansionContext ctx) {
         List<Instruction> out = new ArrayList<>();
-        final String t = ctx.freshZ();
+        String t = ctx.freshZ();
         out.add(new Increase(label, t));
         out.add(new JumpNotZero(null, t, targetLabel));
         return out;

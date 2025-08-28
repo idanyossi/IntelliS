@@ -19,6 +19,10 @@ public interface Instruction {
 
     default List<Instruction> expand(ExpansionContext ctx) { return List.of(this); }
 
+    default String toDisplayString() {
+        return getClass().getSimpleName();
+    }
+
     default int degree() {
         if (isBasic()) return 0;
         // expand once with a dummy context; specs guarantee no cycles

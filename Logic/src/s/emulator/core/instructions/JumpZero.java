@@ -20,6 +20,8 @@ public final class JumpZero implements Instruction {
     }
     private JumpZero() { this.label=null; this.var=null; this.targetLabel=null; }
 
+    @Override public String toDisplayString() { return "IF " + var + " = 0 GOTO " + targetLabel; }
+
     @Override public String getLabel() {return label;}
     @Override public int getCycles() {return 2;}
 
@@ -50,11 +52,10 @@ public final class JumpZero implements Instruction {
     @Override
     public List<Instruction> expand(ExpansionContext ctx) {
         List<Instruction> out = new ArrayList<>();
-        final String skip = ctx.freshLabel();
-
-        out.add(new JumpNotZero(label, var, skip));
+        String L1 = ctx.freshLabel();
+        out.add(new JumpNotZero(label, var, L1));
         out.add(new GotoLabel(null, targetLabel));
-        out.add(new Neutral(skip, var));
+        out.add(new Neutral(L1, var));
         return out;
     }
 }

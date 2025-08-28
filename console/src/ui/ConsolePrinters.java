@@ -1,0 +1,161 @@
+package ui;
+
+import s.emulator.api.dto.Dtos;
+
+import java.util.List;
+
+public class ConsolePrinters {
+    private ConsolePrinters() {}
+
+    // ========== Program ==========
+    static void printProgramSummary(Dtos.ProgramSummary s) {
+        System.out.println("Program: " + s.getProgramName());
+        System.out.println("Inputs: " + String.join(", ", s.getInputsUsed()));
+        System.out.println("Labels: " + String.join(", ", s.getLabelsUsed()));
+        System.out.println();
+
+        for (Dtos.InstructionLine line : s.getInstructions()) {
+            System.out.println(formatLine(line));
+        }
+        System.out.println();
+    }
+
+    // ========== Expansion (horizontal) ==========
+    static void printExpansion(Dtos.ExpansionPreview p) {
+        System.out.println("\nExpanded (horizontal) to degree " + p.getDegree() + ":");
+        for (Dtos.ExpansionRow row : p.getRows()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(formatLine(row.getOrigin()));
+            for (Dtos.InstructionLine child : row.getTail()) {
+                sb.append("  >>>  ").append(formatLine(child));
+            }
+            System.out.println(sb);
+        }
+        System.out.println();
+    }
+
+    // ========== Run result ==========
+    static void printRunResult(Dtos.RunResult rr) {
+        System.out.println("Program: " + rr.getProgramName());
+        System.out.println("Degree: " + rr.getDegree());
+        System.out.println("y = " + rr.getY());
+        System.out.println("Variables:");
+        for (Dtos.NameValue nv : rr.getVariables()) {
+            System.out.println("  " + nv.getName() + " = " + nv.getValue());
+        }
+        System.out.println("Total cycles: " + rr.getCycles());
+    }
+
+    // ========== History ==========
+    static void printHistory(List<Dtos.RunHistoryEntry> hist) {
+        if (hist.isEmpty()) {
+            System.out.println("No runs recorded yet.");
+            return;
+        }
+        System.out.println("Run history:");
+        for (Dtos.RunHistoryEntry e : hist) {
+            String in = joinInputs(e.getInputs());
+            System.out.printf("#%d  degree=%d  inputs=[%s]  y=%d  cycles=%d%n",
+                    e.getRunNo(), e.getDegree(), in, e.getY(), e.getCycles());
+        }
+    }
+
+    // ========== helpers ==========
+    private static String formatLine(Dtos.InstructionLine l) {
+        String kind = l.isBasic() ? "B" : "S";
+        String label = pad5(l.getLabel());
+        String display = l.getDisplay();
+        int cycles = l.getCycles();
+        // "#<n> (B|S) [LABEL] <display> (cycles)"
+        return String.format("#%d (%s) [%s] %s (%d)", l.getLineNumber(), kind, label, display, cycles);
+    }
+
+    private static String pad5(String L) {
+        if (L == null || L.isBlank()) return "     ";
+        String s = L.trim();
+        if (s.length() > 4) s = s.substring(0, 4); // guard, e.g. overly long labels
+        return " " + String.format("%-4s", s);
+    }
+
+    private static String joinInputs(List<Dtos.NameValue> in) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < in.size(); i++) {
+            var nv = in.get(i);
+            if (i > 0) sb.append(',');
+            sb.append(nv.getName()).append('=').append(nv.getValue());
+        }
+        return sb.toString();
+    }
+
+    static void printExpansionDerivations(Dtos.ExpansionPreview p) {
+        System.out.println("\nExpanded (derivations) to degree " + p.getDegree() + ":");
+
+        boolean printedAny = false;
+        for (var row : p.getRows()) {
+            var origin = row.getOrigin();
+            var tail   = row.getTail();
+            if (origin.isBasic() || tail == null || tail.isEmpty()) {
+                continue; // only synthetics with actual expansion
+            }
+            for (var child : tail) {
+                System.out.println(formatBare(child) + "  >>>  " + formatBare(origin));
+                printedAny = true;
+            }
+        }
+
+        if (!printedAny) {
+            System.out.println("(no synthetic expansions at this degree)");
+        }
+        System.out.println();
+    }
+
+    // minimal one-line format: "#<n> <display>"
+    private static String formatBare(Dtos.InstructionLine l) {
+        return String.format("#%d %s", l.getLineNumber(), l.getDisplay());
+    }
+
+    static void printProgramSummaryWithParents(Dtos.ProgramSummary sum, Dtos.ExpansionPreview preview) {
+        System.out.println("Program: " + sum.getProgramName());
+        System.out.println("Inputs: " + String.join(", ", sum.getInputsUsed()));
+        System.out.println("Labels: " + String.join(", ", sum.getLabelsUsed()));
+        System.out.println();
+
+        // Build child -> parent map from the preview (one degree)
+        var parent = new java.util.HashMap<Integer, Dtos.InstructionLine>();
+        if (preview != null && preview.getRows() != null) {
+            for (var row : preview.getRows()) {
+                var origin = row.getOrigin();
+                for (var child : row.getTail()) {
+                    parent.put(child.getLineNumber(), origin);
+                }
+            }
+        }
+
+        // Print each line; if it has a parent, append it after "<<<"
+        for (var line : sum.getInstructions()) {
+            String rendered = formatLine(line);
+            var p = parent.get(line.getLineNumber());
+            if (p != null) {
+                rendered += "  >>>  " + formatLine(p);
+            }
+            System.out.println(rendered);
+        }
+        System.out.println();
+    }
+
+    static void printProgramChain(Dtos.ChainSummary c) {
+        System.out.println("Program: " + c.getProgramName());
+        System.out.println("Degree: " + c.getDegree());
+        System.out.println();
+
+        for (Dtos.ChainLine cl : c.getLines()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(formatLine(cl.getSelf()));
+            for (Dtos.InstructionLine p : cl.getParents()) {
+                sb.append("  >>>  ").append(formatLine(p));
+            }
+            System.out.println(sb);
+        }
+        System.out.println();
+    }
+}
