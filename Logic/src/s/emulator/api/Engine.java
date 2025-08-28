@@ -26,4 +26,7 @@ public interface Engine {
     Dtos.ProgramSummary getProgramSummary(int degree);
 
     Dtos.ChainSummary getProgramChainSummary(int degree);
+
+    void saveSnapshot(java.io.File basePathNoExt) throws Exception;
+    void loadSnapshot(java.io.File basePathNoExt) throws Exception;
 }
