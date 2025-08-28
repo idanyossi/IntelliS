@@ -294,4 +294,74 @@ public class EngineImpl implements Engine {
                 toLines(code)
         );
     }
+    @Override
+    public Dtos.ChainSummary getProgramChainSummary(int degree) {
+        ensureLoaded();
+        final int D = Math.max(0, degree);
+
+        // Build layers 0..D and, for each step k (1..D), a child->parent map from degree k to k-1
+        List<List<Instruction>> layers = new ArrayList<>(D + 1);
+        List<Map<Instruction, Instruction>> parentAt = new ArrayList<>(D + 1);
+
+        // degree 0 (original)
+        List<Instruction> layer0 = current.getInstructions();
+        layers.add(layer0);
+        parentAt.add(null); // no parent map for degree 0
+
+        ExpansionContext ctx = ExpansionContext.fromProgram(current);
+        for (int k = 1; k <= D; k++) {
+            List<Instruction> prev = layers.get(k - 1);
+            List<Instruction> next = new ArrayList<>();
+            Map<Instruction, Instruction> map = new IdentityHashMap<>(); // child@k -> parent@(k-1)
+
+            for (Instruction p : prev) {
+                if (p.isBasic()) {
+                    // pass-through: same object, not "derived" this step
+                    next.add(p);
+                    // no entry in map => no derivation at this step
+                } else {
+                    for (Instruction c : p.expand(ctx)) {
+                        next.add(c);
+                        map.put(c, p);
+                    }
+                }
+            }
+            layers.add(next);
+            parentAt.add(map);
+        }
+
+        // Index maps per degree: instruction -> line number (0-based)
+        List<Map<Instruction, Integer>> idxAt = new ArrayList<>(layers.size());
+        for (List<Instruction> layer : layers) {
+            Map<Instruction, Integer> m = new IdentityHashMap<>();
+            for (int i = 0; i < layer.size(); i++) m.put(layer.get(i), i);
+            idxAt.add(m);
+        }
+
+        // Build ChainLine list for final degree D
+        List<Dtos.ChainLine> out = new ArrayList<>();
+        List<Instruction> finalLayer = layers.get(D);
+        for (int i = 0; i < finalLayer.size(); i++) {
+            Instruction cur = finalLayer.get(i);
+            Dtos.InstructionLine self = toLine(i + 1, cur);
+
+            List<Dtos.InstructionLine> parents = new ArrayList<>();
+            Instruction walk = cur;
+
+            // Walk up D..1; only add when a real derivation happened at that step
+            for (int k = D; k >= 1; k--) {
+                Map<Instruction, Instruction> map = parentAt.get(k);
+                Instruction parent = map.get(walk); // null => pass-through this step
+                if (parent != null) {
+                    int parentIdx = idxAt.get(k - 1).get(parent);
+                    parents.add(toLine(parentIdx + 1, parent));
+                    walk = parent; // keep climbing
+                }
+                // if parent == null: keep 'walk' as-is and continue climbing further back
+            }
+            out.add(Dtos.ChainLine.of(self, parents));
+        }
+
+        return Dtos.ChainSummary.of(current.getName(), D, out);
+    }
 }

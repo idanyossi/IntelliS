@@ -19,7 +19,7 @@ public final class ExpandPrinter {
 
         if (degree <= 0) {
             for (int i = 0; i < original.size(); i++) {
-                System.out.println(ProgramPrinter.formatOne(i + 1, original.get(i))); // uses ins.isBasic()
+                System.out.println(ProgramPrinter.formatOne(i + 1, original.get(i)));
             }
             System.out.println();
             return;

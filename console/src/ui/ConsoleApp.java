@@ -71,9 +71,12 @@ public class ConsoleApp {
         System.out.print("Pick degree [0.." + max + "]: ");
         int d = parseIntInRange(sc.nextLine(), 0, max);
 
-        Dtos.ProgramSummary s = engine.getProgramSummary(d);
-        Dtos.ExpansionPreview prev = (d > 0) ? engine.previewExpansion(d) : null;
-        ConsolePrinters.printProgramSummaryWithParents(s, prev);
+        // Listing for the chosen degree
+        if (d == 0) {
+            ConsolePrinters.printProgramSummary(engine.getProgramSummary(0));
+        } else {
+            ConsolePrinters.printProgramChain(engine.getProgramChainSummary(d));
+        }
     }
 
     private void doRunProgram(Scanner sc) {
@@ -83,9 +86,12 @@ public class ConsoleApp {
         System.out.print("Pick degree [0.." + max + "]: ");
         int d = parseIntInRange(sc.nextLine(), 0, max);
 
-        Dtos.ProgramSummary listing = engine.getProgramSummary(d);
-        Dtos.ExpansionPreview prev = (d > 0) ? engine.previewExpansion(d) : null;
-        ConsolePrinters.printProgramSummaryWithParents(listing, prev);
+        // Show the code at the chosen degree (with full parent chain for d>0)
+        if (d == 0) {
+            ConsolePrinters.printProgramSummary(engine.getProgramSummary(0));
+        } else {
+            ConsolePrinters.printProgramChain(engine.getProgramChainSummary(d));
+        }
 
         List<String> used = engine.getInputsUsed(d);
         System.out.println("Inputs used in this degree: " + (used.isEmpty() ? "(none)" : String.join(",", used)));
@@ -114,7 +120,6 @@ public class ConsoleApp {
             }
         }
 
-        // Results
         System.out.println();
         ConsolePrinters.printRunResult(rr);
     }

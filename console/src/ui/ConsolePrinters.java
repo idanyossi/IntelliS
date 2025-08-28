@@ -72,7 +72,9 @@ public class ConsolePrinters {
 
     private static String pad5(String L) {
         if (L == null || L.isBlank()) return "     ";
-        return String.format("%-5s", L);
+        String s = L.trim();
+        if (s.length() > 4) s = s.substring(0, 4); // guard, e.g. overly long labels
+        return " " + String.format("%-4s", s);
     }
 
     private static String joinInputs(List<Dtos.NameValue> in) {
@@ -96,7 +98,7 @@ public class ConsolePrinters {
                 continue; // only synthetics with actual expansion
             }
             for (var child : tail) {
-                System.out.println(formatBare(child) + "  <<<  " + formatBare(origin));
+                System.out.println(formatBare(child) + "  >>>  " + formatBare(origin));
                 printedAny = true;
             }
         }
@@ -134,9 +136,25 @@ public class ConsolePrinters {
             String rendered = formatLine(line);
             var p = parent.get(line.getLineNumber());
             if (p != null) {
-                rendered += "  <<<  " + formatLine(p);
+                rendered += "  >>>  " + formatLine(p);
             }
             System.out.println(rendered);
+        }
+        System.out.println();
+    }
+
+    static void printProgramChain(Dtos.ChainSummary c) {
+        System.out.println("Program: " + c.getProgramName());
+        System.out.println("Degree: " + c.getDegree());
+        System.out.println();
+
+        for (Dtos.ChainLine cl : c.getLines()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(formatLine(cl.getSelf()));
+            for (Dtos.InstructionLine p : cl.getParents()) {
+                sb.append("  >>>  ").append(formatLine(p));
+            }
+            System.out.println(sb);
         }
         System.out.println();
     }

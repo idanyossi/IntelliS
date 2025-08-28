@@ -57,7 +57,7 @@ public final class Dtos {
         public String getDisplay() { return display; }
         public int getCycles() { return cycles; }
     }
-    
+
     public static final class ExpansionPreview {
         private final int degree;
         private final List<ExpansionRow> rows;
@@ -149,6 +149,39 @@ public final class Dtos {
         }
         public String getName() { return name; }
         public int getValue() { return value; }
+    }
+
+    public static final class ChainLine {
+        private final InstructionLine self;
+        private final List<InstructionLine> parents; // ordered: D-1, D-2, ..., 0
+
+        private ChainLine(InstructionLine self, List<InstructionLine> parents) {
+            this.self = self;
+            this.parents = parents;
+        }
+        public static ChainLine of(InstructionLine self, List<InstructionLine> parents) {
+            return new ChainLine(self, parents);
+        }
+        public InstructionLine getSelf() { return self; }
+        public List<InstructionLine> getParents() { return parents; }
+    }
+
+    public static final class ChainSummary {
+        private final String programName;
+        private final int degree;
+        private final List<ChainLine> lines;
+
+        private ChainSummary(String programName, int degree, List<ChainLine> lines) {
+            this.programName = programName;
+            this.degree = degree;
+            this.lines = lines;
+        }
+        public static ChainSummary of(String programName, int degree, List<ChainLine> lines) {
+            return new ChainSummary(programName, degree, lines);
+        }
+        public String getProgramName() { return programName; }
+        public int getDegree() { return degree; }
+        public List<ChainLine> getLines() { return lines; }
     }
 
     public static <T> List<T> listOf() { return Collections.emptyList(); }
