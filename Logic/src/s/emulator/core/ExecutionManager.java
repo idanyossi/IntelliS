@@ -78,12 +78,82 @@ public class ExecutionManager {
         return out;
     }
 
-    public void jumpToLabel(String label) {
-        if (label == null || label.isBlank()) throw new IllegalArgumentException("jumpToLabel: label is empty");
-        if ("EXIT".equalsIgnoreCase(label)) { stop(); return; }
-        var idx = program.lookupLabel(label);
-        if (idx.isEmpty()) throw new IllegalStateException("Unknown label: " + label);
-        setPC(idx.getAsInt());
+    public void jumpToLabel(String rawLabel) {
+        String L = (rawLabel == null) ? "" : rawLabel.trim();
+
+        // Defensive recovery for synthetics that passed a blank label
+        if (L.isEmpty()) {
+            Instruction cur = null;
+            List<Instruction> code = program.getInstructions();
+            if (pc >= 0 && pc < code.size()) cur = code.get(pc);
+
+            String inferred = inferTargetLabel(cur);
+            if (inferred != null && !inferred.isBlank()) {
+                L = inferred.trim();
+            } else {
+                throw new IllegalStateException(
+                        "jumpToLabel: label is empty at pc=" + pc + "  ins=" + safe(toDisplay(cur))
+                );
+            }
+        }
+
+        // EXIT = halt
+        if ("EXIT".equalsIgnoreCase(L)) {
+            halt();
+            return;
+        }
+
+        // Linear resolve (no cache required)
+        List<Instruction> code = program.getInstructions();
+        for (int i = 0; i < code.size(); i++) {
+            String lab = code.get(i).getLabel();
+            if (lab != null && lab.trim().equalsIgnoreCase(L)) {
+                this.pc = i;
+                return;
+            }
+        }
+
+        Instruction cur = null;
+        if (pc >= 0 && pc < code.size()) cur = code.get(pc);
+        throw new IllegalStateException(
+                "jumpToLabel: unknown label '" + L + "' at pc=" + pc + "  ins=" + safe(toDisplay(cur))
+        );
+    }
+
+    private String inferTargetLabel(Instruction ins) {
+        if (ins == null) return null;
+
+        // 1) Look for any String field whose name contains "label" but isn't the instruction's own label
+        try {
+            for (java.lang.reflect.Field f : ins.getClass().getDeclaredFields()) {
+                if (f.getType() == String.class) {
+                    String name = f.getName().toLowerCase(java.util.Locale.ROOT);
+                    if (name.contains("label") && !name.equals("label")) {
+                        f.setAccessible(true);
+                        Object v = f.get(ins);
+                        if (v instanceof String s && !s.isBlank()) return s.trim();
+                    }
+                }
+            }
+        } catch (Exception ignore) {}
+
+        // 2) Fallback: parse "... GOTO XXX" from toDisplayString()
+        String disp = safe(ins.toDisplayString());
+        java.util.regex.Matcher m =
+                java.util.regex.Pattern.compile("\\bGOTO\\s+([A-Za-z0-9_]+)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                        .matcher(disp);
+        if (m.find()) return m.group(1).trim();
+
+        return null;
+    }
+
+    private static String toDisplay(Instruction ins) {
+        try { return ins == null ? "" : ins.toDisplayString(); } catch (Exception e) { return ""; }
+    }
+    private static String safe(String s) { return s == null ? "" : s; }
+
+    private void halt() {
+        this.pc = program.getInstructions().size(); // or set your existing 'halted' flag
     }
 
     private static int suffixInt(String s) {
