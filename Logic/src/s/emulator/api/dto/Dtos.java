@@ -1,5 +1,6 @@
 package s.emulator.api.dto;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -182,6 +183,64 @@ public final class Dtos {
         public String getProgramName() { return programName; }
         public int getDegree() { return degree; }
         public List<ChainLine> getLines() { return lines; }
+    }
+
+    private static final class SavedState implements Serializable {
+        private static final long serialVersionUID = 1L;
+        String programName;
+        byte[] xmlContent; // original XML bytes
+        List<RunHistoryPlain> history;
+    }
+
+    private static final class RunHistoryPlain implements Serializable {
+        private static final long serialVersionUID = 1L;
+        int runNo;
+        int degree;
+        List<NameValuePlain> inputs;
+        int y;
+        long cycles;
+    }
+
+    private static final class NameValuePlain implements Serializable {
+        private static final long serialVersionUID = 1L;
+        String name;
+        int value;
+    }
+
+    /* ---------- Mappers between Dtos & plain ---------- */
+    private static List<RunHistoryPlain> toPlainHistory(List<Dtos.RunHistoryEntry> hist) {
+        List<RunHistoryPlain> out = new ArrayList<>(hist.size());
+        for (Dtos.RunHistoryEntry e : hist) {
+            RunHistoryPlain p = new RunHistoryPlain();
+            p.runNo = e.getRunNo();
+            p.degree = e.getDegree();
+            p.y = e.getY();
+            p.cycles = e.getCycles();
+            p.inputs = new ArrayList<>();
+            for (Dtos.NameValue nv : e.getInputs()) {
+                NameValuePlain np = new NameValuePlain();
+                np.name = nv.getName();
+                np.value = nv.getValue();
+                p.inputs.add(np);
+            }
+            out.add(p);
+        }
+        return out;
+    }
+
+    private static List<Dtos.RunHistoryEntry> fromPlainHistory(List<RunHistoryPlain> src) {
+        if (src == null) return List.of();
+        List<Dtos.RunHistoryEntry> out = new ArrayList<>(src.size());
+        for (RunHistoryPlain p : src) {
+            List<Dtos.NameValue> ins = new ArrayList<>();
+            if (p.inputs != null) {
+                for (NameValuePlain np : p.inputs) {
+                    ins.add(Dtos.NameValue.of(np.name, np.value));
+                }
+            }
+            out.add(Dtos.RunHistoryEntry.of(p.runNo, p.degree, ins, p.y, p.cycles));
+        }
+        return out;
     }
 
     public static <T> List<T> listOf() { return Collections.emptyList(); }

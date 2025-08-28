@@ -27,6 +27,8 @@ public class ConsoleApp {
                 4) Run program
                 5) Show history
                 6) Exit
+                7) Save State
+                8) Load State
                 """);
             System.out.print("> ");
             String choice = sc.nextLine().trim();
@@ -38,6 +40,9 @@ public class ConsoleApp {
                     case "4" -> doRunProgram(sc);
                     case "5" -> doHistory();
                     case "6" -> System.exit(0);
+                    case "7" -> doSaveState(sc);
+                    case "8" -> doLoadState(sc);
+
                     default -> System.out.println("Unknown option");
                 }
             } catch (Exception e) {
@@ -56,6 +61,31 @@ public class ConsoleApp {
         String path = sc.nextLine().trim();
         engine.loadProgram(new File(path));
         System.out.println("Loaded program: " + engine.currentProgramName());
+    }
+
+    private void doSaveState(Scanner sc) {
+        needsProgram();
+        System.out.print("Enter full path + filename (without extension) to SAVE: ");
+        String base = sc.nextLine().trim();
+        if (base.isBlank()) { System.out.println("Canceled."); return; }
+        try {
+            engine.saveSnapshot(new File(base));
+            System.out.println("Saved to: " + base + ".ser");
+        } catch (Exception e) {
+            System.out.println("Error saving: " + e.getMessage());
+        }
+    }
+
+    private void doLoadState(Scanner sc) {
+        System.out.print("Enter full path + filename (without extension) to LOAD: ");
+        String base = sc.nextLine().trim();
+        if (base.isBlank()) { System.out.println("Canceled."); return; }
+        try {
+            engine.loadSnapshot(new File(base));
+            System.out.println("Loaded snapshot from: " + base + ".ser");
+        } catch (Exception e) {
+            System.out.println("Error loading: " + e.getMessage());
+        }
     }
 
     private void doShowCode() {

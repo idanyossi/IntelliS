@@ -29,7 +29,7 @@ public final class JumpZero implements Instruction {
     public void execute(ExecutionManager executionManager) {
         executionManager.addCycles(getCycles());
         if(executionManager.getVar(var) == 0){
-            executionManager.jumpToLabel(getLabel());
+            executionManager.jumpToLabel(targetLabel);
         } else {
             executionManager.incPC();
         }

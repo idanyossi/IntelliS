@@ -9,19 +9,23 @@ import s.emulator.core.instructions.Increase;
 import s.emulator.core.instructions.JumpNotZero;
 import s.emulator.core.instructions.Neutral;
 
-import java.io.File;
+import java.io.*;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class EngineImpl implements Engine {
     private Program current;
     private final List<Dtos.RunHistoryEntry> history = new ArrayList<>();
+    private byte[] lastXmlBytes;
 
 
     @Override
     public void loadProgram(File xml) throws Exception {
         current = new XmlProgramLoader().load(xml);
+        lastXmlBytes = Files.readAllBytes(xml.toPath());
+        validateProgram(current);
         history.clear();
     }
 
@@ -366,5 +370,210 @@ public class EngineImpl implements Engine {
         }
 
         return Dtos.ChainSummary.of(current.getName(), D, out);
+    }
+
+    @Override
+    public void saveSnapshot(File basePathNoExt) throws Exception {
+        ensureLoaded();
+        if (lastXmlBytes == null || lastXmlBytes.length == 0) {
+            throw new IllegalStateException("No XML cached for current program; load an XML first.");
+        }
+        SavedState snap = new SavedState();
+        snap.programName = current.getName();
+        snap.xmlContent  = lastXmlBytes;
+        snap.history     = toPlainHistory(history);
+
+        File out = withExt(basePathNoExt, ".ser");
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(out))) {
+            oos.writeObject(snap);
+        }
+    }
+
+    @Override
+    public void loadSnapshot(File basePathNoExt) throws Exception {
+        File in = withExt(basePathNoExt, ".ser");
+        if (!in.exists()) throw new FileNotFoundException("Snapshot not found: " + in.getAbsolutePath());
+
+        SavedState snap;
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(in))) {
+            snap = (SavedState) ois.readObject();
+        }
+
+        // Recreate program from XML bytes (no need to change Program classes)
+        File tmp = File.createTempFile("prog-", ".xml");
+        Files.write(tmp.toPath(), snap.xmlContent);
+        try {
+            current = new XmlProgramLoader().load(tmp);
+        } finally {
+            tmp.delete();
+        }
+
+        this.lastXmlBytes = snap.xmlContent;
+        this.history.clear();
+        this.history.addAll(fromPlainHistory(snap.history));
+    }
+
+    private static File withExt(File base, String ext) {
+        String p = base.getPath();
+        if (p.endsWith(ext)) return base;
+        return new File(p + ext);
+    }
+
+    /* ---------- Serializable snapshot DTOs ---------- */
+    private static final class SavedState implements Serializable {
+        private static final long serialVersionUID = 1L;
+        String programName;
+        byte[] xmlContent; // original XML bytes
+        List<RunHistoryPlain> history;
+    }
+
+    private static final class RunHistoryPlain implements Serializable {
+        private static final long serialVersionUID = 1L;
+        int runNo;
+        int degree;
+        List<NameValuePlain> inputs;
+        int y;
+        long cycles;
+    }
+
+    private static final class NameValuePlain implements Serializable {
+        private static final long serialVersionUID = 1L;
+        String name;
+        int value;
+    }
+
+    /* ---------- Mappers between Dtos & plain ---------- */
+    private static List<RunHistoryPlain> toPlainHistory(List<Dtos.RunHistoryEntry> hist) {
+        List<RunHistoryPlain> out = new ArrayList<>(hist.size());
+        for (Dtos.RunHistoryEntry e : hist) {
+            RunHistoryPlain p = new RunHistoryPlain();
+            p.runNo = e.getRunNo();
+            p.degree = e.getDegree();
+            p.y = e.getY();
+            p.cycles = e.getCycles();
+            p.inputs = new ArrayList<>();
+            for (Dtos.NameValue nv : e.getInputs()) {
+                NameValuePlain np = new NameValuePlain();
+                np.name = nv.getName();
+                np.value = nv.getValue();
+                p.inputs.add(np);
+            }
+            out.add(p);
+        }
+        return out;
+    }
+
+    private static List<Dtos.RunHistoryEntry> fromPlainHistory(List<RunHistoryPlain> src) {
+        if (src == null) return List.of();
+        List<Dtos.RunHistoryEntry> out = new ArrayList<>(src.size());
+        for (RunHistoryPlain p : src) {
+            List<Dtos.NameValue> ins = new ArrayList<>();
+            if (p.inputs != null) {
+                for (NameValuePlain np : p.inputs) {
+                    ins.add(Dtos.NameValue.of(np.name, np.value));
+                }
+            }
+            out.add(Dtos.RunHistoryEntry.of(p.runNo, p.degree, ins, p.y, p.cycles));
+        }
+        return out;
+    }
+
+    private static boolean isBlank(String s) { return s == null || s.isBlank(); }
+
+    private static boolean isNumeric(String s) {
+        return s != null && s.matches("-?\\d+");
+    }
+    private static boolean isExit(String s) {
+        return s != null && s.equalsIgnoreCase("EXIT");
+    }
+    private static boolean isLabelToken(String s) {
+        return s != null && s.matches("L\\d+");
+    }
+    private static boolean isVarToken(String s) {
+        // valid: y   OR   x<number>   OR   z<number>
+        return s != null && (s.equals("y") || s.matches("x\\d+") || s.matches("z\\d+"));
+    }
+
+    /** Extract any String-like “label references” from an instruction by reflection.
+     * Heuristic: any String field whose value looks like L<digits> or EXIT is considered a label reference.
+     */
+    private static List<String> findReferencedLabels(Instruction ins) {
+        List<String> out = new ArrayList<>();
+        for (Field f : ins.getClass().getDeclaredFields()) {
+            if (f.getType() != String.class) continue;
+            f.setAccessible(true);
+            try {
+                Object v = f.get(ins);
+                if (!(v instanceof String s) || isBlank(s)) continue;
+                if (isLabelToken(s) || isExit(s)) out.add(s);
+            } catch (Exception ignore) {}
+        }
+        return out;
+    }
+
+    /** Extract any String-like “variables” from an instruction by reflection.
+     * Heuristic: consider String fields that are NOT labels/EXIT/numerics; the valid ones must be y/x#/z#.
+     */
+    private static List<String> findVariables(Instruction ins) {
+        List<String> out = new ArrayList<>();
+        for (Field f : ins.getClass().getDeclaredFields()) {
+            if (f.getType() != String.class) continue;
+            f.setAccessible(true);
+            try {
+                Object v = f.get(ins);
+                if (!(v instanceof String s) || isBlank(s)) continue;
+                if (isExit(s) || isLabelToken(s) || isNumeric(s)) continue; // not a variable
+                out.add(s);
+            } catch (Exception ignore) {}
+        }
+        return out;
+    }
+
+    private void validateProgram(Program program) {
+        List<Instruction> code = program.getInstructions();
+
+        // 1) Collect declared labels & validate their format
+        final Set<String> declaredLabels = new HashSet<>();
+        for (int i = 0; i < code.size(); i++) {
+            Instruction ins = code.get(i);
+            String lbl = ins.getLabel();
+            if (!isBlank(lbl)) {
+                if (!isLabelToken(lbl)) {
+                    String msg = String.format(
+                            "Invalid label format at line #%d: \"%s\". Labels must be L<digits> (e.g., L7).",
+                            i + 1, lbl);
+                    throw new IllegalArgumentException(msg);
+                }
+                declaredLabels.add(lbl);
+            }
+        }
+
+        // 2) Validate variable tokens across all String fields (excluding labels/EXIT/numerics)
+        for (int i = 0; i < code.size(); i++) {
+            Instruction ins = code.get(i);
+            List<String> vars = findVariables(ins);
+            for (String v : vars) {
+                if (!isVarToken(v)) {
+                    String msg = String.format(
+                            "Invalid variable \"%s\" at line #%d. Valid names: y, x<digits>, z<digits>.",
+                            v, i + 1);
+                    throw new IllegalArgumentException(msg);
+                }
+            }
+        }
+
+        // 3) Validate that every referenced label exists (unless it is EXIT)
+        for (int i = 0; i < code.size(); i++) {
+            Instruction ins = code.get(i);
+            for (String target : findReferencedLabels(ins)) {
+                if (isExit(target)) continue; // EXIT is always allowed
+                if (!declaredLabels.contains(target)) {
+                    String msg = String.format(
+                            "Jump to unknown label at line #%d: \"%s\" is not declared in this program.",
+                            i + 1, target);
+                    throw new IllegalArgumentException(msg);
+                }
+            }
+        }
     }
 }
