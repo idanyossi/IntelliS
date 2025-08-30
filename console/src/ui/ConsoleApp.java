@@ -26,9 +26,9 @@ public class ConsoleApp {
                 3) Show degree
                 4) Run program
                 5) Show history
-                6) Exit
-                7) Save State
-                8) Load State
+                6) Save State
+                7) Load State
+                8) Exit
                 """);
             System.out.print("> ");
             String choice = sc.nextLine().trim();
@@ -39,9 +39,9 @@ public class ConsoleApp {
                     case "3" -> doShowDegree(sc);
                     case "4" -> doRunProgram(sc);
                     case "5" -> doHistory();
-                    case "6" -> System.exit(0);
-                    case "7" -> doSaveState(sc);
-                    case "8" -> doLoadState(sc);
+                    case "6" -> doSaveState(sc);
+                    case "7" -> doLoadState(sc);
+                    case "8" -> System.exit(0);
 
                     default -> System.out.println("Unknown option");
                 }
